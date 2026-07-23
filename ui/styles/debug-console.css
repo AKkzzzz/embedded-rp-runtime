@@ -735,6 +735,11 @@ textarea:focus {
     display: none;
   }
 
+  /* 游戏舞台必须保留返回后台入口；否则手机端启动后无法回到工具/诊断页。 */
+  .game-surface .runtime-actions .secondary {
+    display: inline-flex;
+  }
+
   .runtime-layout {
     grid-template-columns: 1fr;
     min-height: calc(100dvh - 94px);

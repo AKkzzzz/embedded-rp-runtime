@@ -41,6 +41,7 @@
         return;
       }
       window.RPStorage.saveCanonical(result.value);
+      document.querySelector('.runtime-topbar').hidden = true;
       document.querySelector('.runtime-layout').hidden = true;
       document.getElementById('gameSurface').hidden = false;
       window.RPConversationConsole.render();
@@ -50,6 +51,7 @@
     document.getElementById('backToDebug').onclick = function () {
       document.getElementById('gameSurface').hidden = true;
       document.querySelector('.runtime-layout').hidden = false;
+      document.querySelector('.runtime-topbar').hidden = false;
       window.RPDebugConsole.renderAll();
     };
 
