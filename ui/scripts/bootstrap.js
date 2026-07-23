@@ -62,6 +62,38 @@
       });
     };
 
+    var fullscreenButton = document.getElementById('debugFullscreenButton');
+    var shell = document.getElementById('runtimeShell');
+    function setFullscreenState(active) {
+      shell.classList.toggle('debug-fullscreen', active);
+      document.body.classList.toggle('debug-fullscreen-body', active);
+      fullscreenButton.textContent = active ? '退出全屏' : '全屏';
+      fullscreenButton.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+    async function toggleDebugFullscreen() {
+      var active = Boolean(document.fullscreenElement) || shell.classList.contains('debug-fullscreen');
+      if (active) {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          try { await document.exitFullscreen(); } catch (_error) {}
+        }
+        setFullscreenState(false);
+        return;
+      }
+      if (shell.requestFullscreen) {
+        try {
+          await shell.requestFullscreen();
+          setFullscreenState(true);
+          return;
+        } catch (_error) {}
+      }
+      // iOS/Sandbox fallback: fill the iframe viewport without using the browser chrome.
+      setFullscreenState(true);
+    }
+    fullscreenButton.onclick = toggleDebugFullscreen;
+    document.addEventListener('fullscreenchange', function () {
+      setFullscreenState(Boolean(document.fullscreenElement));
+    });
+
     window.RPEvents.emit('runtime:ready', {
       app: window.RPTemplateData.app,
       capabilities: caps

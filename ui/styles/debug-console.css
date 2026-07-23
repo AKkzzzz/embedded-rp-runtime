@@ -17,6 +17,30 @@ body {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
 }
 
+.runtime-shell.debug-fullscreen,
+:fullscreen.runtime-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.debug-fullscreen-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.debug-fullscreen .runtime-layout {
+  min-height: calc(100dvh - 84px);
+}
+
 .runtime-topbar {
   display: flex;
   align-items: center;
