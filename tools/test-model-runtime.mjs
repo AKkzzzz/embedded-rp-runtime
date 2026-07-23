@@ -154,6 +154,9 @@ assert.equal((await sandbox.RPVectorMemory.search('旧港口')).length, 2);
 sandbox.RPStorage.savePreferences({ memoryModules: { vectorEnabled: false } });
 
 sandbox.RPCardContext = { name: '测试角色', personality: '稳定', scenario: '测试场景' };
+load('ui/runtime/regex-engine.js');
+load('ui/runtime/tool-engine.js');
+assert.equal(sandbox.RPTools.parse('<tool_grep:旧港口>')[0].query, '旧港口');
 sandbox.RPPrompt = {
   async compile(input, options) {
     return {

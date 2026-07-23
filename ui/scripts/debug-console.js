@@ -292,6 +292,34 @@
     };
   }
 
+  function renderTools() {
+    var target = page('tools');
+    var rows = (window.RPTools ? window.RPTools.list() : []).map(function (tool) {
+      var explanation = tool.type === 'vector_memory'
+        ? '按语义召回卡内向量记忆；依赖向量模块和 RP-Hub embedding 配置。'
+        : tool.type === 'keyword_dialogue'
+          ? '按原文关键词找当前对话片段，不调用外部网络。'
+          : '保留 RP-Hub 联网工具协议；当前卡内默认关闭，宿主未提供搜索桥时会安全返回不可用。';
+      return '<div class="data-row stack"><div><strong>' + escapeHtml(tool.name) + '</strong> ' +
+        badge(tool.enabled ? '已启用' : '已关闭', tool.enabled ? 'ok' : 'warn') +
+        '</div><div class="tiny">' + escapeHtml(tool.callName) + ' · ' + escapeHtml(tool.type) + '</div>' +
+        '<p class="muted">' + escapeHtml(explanation) + '</p><button type="button" data-tool-toggle="' +
+        escapeHtml(tool.id) + '">' + (tool.enabled ? '关闭工具' : '启用工具') + '</button></div>';
+    }).join('');
+    target.innerHTML = pageHead(
+      '卡内工具栏',
+      '工具协议与 RP-Hub 对齐，但执行留在卡内：向量记忆、历史关键词检索和受控联网接口可以独立开关。模型只有在本页启用工具后才会收到对应标签说明。'
+    ) + '<div class="debug-card"><div class="row-list">' + rows + '</div></div>' +
+      '<article class="debug-card wide"><p class="eyebrow">TOOL FLOW</p><p class="muted">模型输出工具标签 → 卡内执行 → 结果以 active_tool_results 回填 → 最多自动续写 4 轮 → 最终正文再经过输出正则。</p></article>';
+    target.querySelectorAll('[data-tool-toggle]').forEach(function (button) {
+      button.onclick = function () {
+        var tool = window.RPTools.list().find(function (item) { return item.id === button.dataset.toolToggle; });
+        window.RPTools.setEnabled(tool.id, !tool.enabled);
+        renderTools();
+      };
+    });
+  }
+
   function renderDiagnostics() {
     var target = page('diagnostics');
     target.innerHTML = pageHead(
@@ -315,6 +343,7 @@
     renderPresets();
     renderPlugins();
     renderMemory();
+    renderTools();
     renderDiagnostics();
   }
 
@@ -327,6 +356,7 @@
       presets: renderPresets,
       plugins: renderPlugins,
       memory: renderMemory,
+      tools: renderTools,
       diagnostics: renderDiagnostics
     };
     if (renderers[id]) renderers[id]();

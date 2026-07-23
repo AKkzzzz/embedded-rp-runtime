@@ -48,6 +48,23 @@
     });
   }
 
+  function stylePriority() {
+    return '[Style Priority]\n开场白和历史消息只用于理解剧情事实、人物关系和场景状态，不作为文风模板；不要继承或模仿开场白、前文回复的句式、语气密度、段落节奏或排版习惯。最终回复的文风必须优先遵守上方系统预设中的规定文风。';
+  }
+
+  function activeToolProtocol() {
+    if (!window.RPTools) return '';
+    var enabled = window.RPTools.list().filter(function (tool) { return tool.enabled; });
+    if (!enabled.length) return '';
+    var lines = enabled.map(function (tool) {
+      if (tool.type === 'vector_memory') return '<tool_memory_add:具体检索内容> 或 <tool_memory_cover:具体检索内容>：检索较早剧情、人物关系、物品和事件记忆。';
+      if (tool.type === 'keyword_dialogue') return '<tool_grep_add:原文关键词> 或 <tool_grep_cover:原文关键词>：精准查找当前对话历史中的原文片段。';
+      if (tool.type === 'web_search') return '<tool_web_add:搜索词或URL> 或 <tool_web_cover:搜索词或URL>：查询外部资料；只有宿主提供搜索能力时可用。';
+      return '<' + tool.callName + ':查询内容>';
+    });
+    return '[Active Tools]\n上下文不足时，可在正式正文前单独输出工具标签。每行一个，单轮最多5个；收到 <active_tool_results> 后继续正文，不要复述标签。\n' + lines.join('\n');
+  }
+
   function insertAtDepth(messages, referenceMessages, hit, safeTargetLimit) {
     var reversed = referenceMessages.slice().reverse();
     var countdown = Number.isFinite(Number(hit.insertionDepth)) ? Number(hit.insertionDepth) : 4;
@@ -82,8 +99,8 @@
     var groups = groupHits(retrieval.hits);
     var memories = window.RPMemory.searchStructured(input, { topK: options.memoryTopK });
     var summaries = window.RPMemory.listStructured().filter(function (memory) {
-      return memory.kind === 'summary' && memory.stale !== true;
-    }).slice(-3);
+      return (memory.kind === 'summary' || memory.kind === 'classicMemory') && memory.stale !== true;
+    }).slice(-12);
     var vectorMemories = await window.RPMemory.searchVectors(input, { signal: options.signal });
     var presetGroups = window.RPPresets.compile();
     var messages = [];
@@ -98,10 +115,14 @@
         role: 'system',
         content: '[System Presets]\n' + presetGroups.systemSupport.map(function (preset) {
           return '【' + preset.name + '】\n' + preset.content;
-        }).join('\n\n---\n\n'),
+        }).join('\n\n---\n\n') + '\n\n' + stylePriority(),
         source: 'presets:system-support'
       });
+    } else {
+      messages.push({ role: 'system', content: stylePriority(), source: 'runtime:style-priority' });
     }
+    var toolProtocol = activeToolProtocol();
+    if (toolProtocol) messages.push({ role: 'system', content: toolProtocol, source: 'runtime:active-tools' });
     presetGroups.prelude.forEach(function (preset) {
       messages.push({ role: preset.role, content: preset.content, source: 'preset:' + preset.id });
     });
@@ -181,6 +202,7 @@
 
     var context = { input: input, messages: messages, retrieval: retrieval, memories: memories };
     context = await window.RPPlugins.run('beforePromptCompile', context);
+    if (window.RPRegex) context.messages = window.RPRegex.applyPrompt(context.messages);
     last = {
       input: String(input || ''),
       messages: context.messages,

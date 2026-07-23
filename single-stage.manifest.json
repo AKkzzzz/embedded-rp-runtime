@@ -33,6 +33,31 @@
     "streaming": true,
     "fallbackMode": "diagnostic-only"
   },
+  "prompt": {
+    "stylePriority": true,
+    "regexChannels": ["prompt", "output"],
+    "maxToolContinuationRounds": 4
+  },
+  "tools": [
+    {
+      "id": "tool_memory",
+      "type": "vector_memory",
+      "enabled": false,
+      "capabilities": ["memory:read"]
+    },
+    {
+      "id": "tool_grep",
+      "type": "keyword_dialogue",
+      "enabled": false,
+      "capabilities": ["conversation:read"]
+    },
+    {
+      "id": "tool_web",
+      "type": "web_search",
+      "enabled": false,
+      "capabilities": ["network:search"]
+    }
+  ],
   "plugins": [
     {
       "id": "runtime.worldbook.recursion",

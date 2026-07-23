@@ -71,12 +71,15 @@
       var configured = window.RPStorage.getPreferences().memoryModules || {};
       var maxFloors = Math.max(0, Number(configured.maxHistoryFloors || 50));
       var sourceHistory = options.historyMessages || baseMessages;
-      var promptHistory = maxFloors > 0 ? sourceHistory.slice(-maxFloors * 2) : sourceHistory;
+      var promptHistory = configured.summaryEnabled && window.RPSummary
+        ? window.RPSummary.contextHistory(sourceHistory, maxFloors)
+        : (maxFloors > 0 ? sourceHistory.slice(-maxFloors * 2) : sourceHistory);
       var compiled = await window.RPPrompt.compile(input, {
         history: history(promptHistory),
         character: window.RPCardContext || null
       });
-      var result = await window.RPModels.generate('narrative', compiled.messages, {
+      var requestMessages = compiled.messages.slice();
+      var result = await window.RPModels.generate('narrative', requestMessages, {
         signal: controller.signal,
         onDelta: function (delta) {
           draft.content += delta;
@@ -89,6 +92,35 @@
       });
       if (!draft.content && result.content) draft.content = result.content;
       if (!draft.reasoning && result.reasoning) draft.reasoning = result.reasoning;
+      var toolRounds = 0;
+      var toolSource = result.content || draft.content;
+      while (window.RPTools && toolRounds < 4) {
+        var toolResult = await window.RPTools.run(toolSource, { messages: baseMessages });
+        if (!toolResult.calls.length) break;
+        toolRounds += 1;
+        requestMessages.push({ role: 'assistant', content: draft.content, source: 'tool:request' });
+        requestMessages.push({ role: 'user', content: toolResult.prompt, source: 'tool:result' });
+        var beforeToolContinuation = draft.content.length;
+        var continuation = await window.RPModels.generate('narrative', requestMessages, {
+          signal: controller.signal,
+          onDelta: function (delta) {
+            draft.content += delta;
+            changed('stream-delta');
+          },
+          onReasoning: function (delta) {
+            draft.reasoning += delta;
+            changed('reasoning-delta');
+          }
+        });
+        var generated = draft.content.slice(beforeToolContinuation) || continuation.content || '';
+        requestMessages.push({ role: 'assistant', content: generated, source: 'tool:continuation' });
+        toolSource = generated;
+        if (!window.RPTools.parse(generated).length) break;
+      }
+      draft.content = draft.content.replace(/<\s*tool_[a-z0-9_]+\s*:[\s\S]*?>/gi, '').trim();
+      if (window.RPRegex) {
+        draft.content = window.RPRegex.applyOutput(draft.content, { role: 'assistant' }, baseMessages.length);
+      }
       var finalMessages = baseMessages.slice();
       if (options.appendToId) {
         var index = finalMessages.findIndex(function (message) { return message.id === options.appendToId; });

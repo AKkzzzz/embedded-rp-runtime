@@ -14,7 +14,7 @@
 
 > RP-Hub 是成熟的通用宿主；内嵌运行时是更严格、更可编程的卡内应用内核。
 
-最新 RP-Hub 会把破限、辅助预设、Style Priority、用户资料、工具协议和 UI Template 上下文合并进系统提示，并在请求前执行 Prompt Regex。模板目前已对齐官方预设、世界书位置、基础历史、模型请求和卡内记忆，但尚未完整对齐用户资料、Style Priority、主动工具协议、Prompt Regex 后处理和原生 UI Template 上下文。
+最新 RP-Hub 会把破限、辅助预设、Style Priority、用户资料、工具协议和 UI Template 上下文合并进系统提示，并在请求前执行 Prompt Regex。模板现在已经把 Style Priority、卡内 Prompt/Output Regex、逐轮 classicMemory 和三类卡内工具协议接入；用户资料、宿主 UI Template 上下文仍按单舞台设计刻意不复制。
 
 因此当前不能宣称“模型看到的消息与 RP-Hub 完全一致”。模板在状态约束、事务写入、显式递归和单舞台生命周期上更强，但生成文风、工具反应与部分上下文仍可能不同。
 
@@ -33,8 +33,10 @@
 | 世界书预算 | 不单独裁剪命中条目 | 默认不裁剪，可由应用包启用字符预算 | 默认兼容，复杂卡可收紧 |
 | 模型写世界书 | 无卡内事务协议 | proposal、revision、证据、锁定条目 | 模板更强 |
 | 状态更新 | 原生变量更新模型，部分 JSON 合并 | schema、只读、枚举、范围、未知字段、事务 | 模板更严格 |
-| 向量记忆 | embedding、int8 量化、Top K、主动检索和向量模式历史裁剪 | 卡内 IndexedDB、embedding、Top K、关键词加权和历史裁剪已实现；量化与主动工具检索待补 | RP-Hub 更完整，卡内隔离更强 |
-| 总结记忆 | `classicModel` 逐轮总结，旧 AI 消息由摘要替换 | `summary` route 汇总旧历史并作为结构化摘要注入 | 都能压缩旧历史，但当前语义不完全相同 |
+| 向量记忆 | embedding、int8 量化、Top K、主动检索和向量模式历史裁剪 | 卡内 IndexedDB、embedding、Top K、关键词加权、历史裁剪和 `<tool_memory:…>` 主动检索 | RP-Hub 仍有量化和更成熟的任务队列，卡内隔离更强 |
+| 总结记忆 | `classicModel` 逐轮总结，旧 AI 消息由摘要替换 | 默认关闭；开启后按逐轮目标总结，保留 user、以 classicMemory 替换旧 assistant，再注入最近楼层 | 语义已基本对齐，批量巡检/并发仍未复制 |
+| Prompt Regex | 请求前/显示后按脚本顺序处理 | 卡内 Regex Registry，区分 prompt/output、频道和深度，最终正文经过 output 阶段 | 卡内脚本可控；尚未复制全部宿主编辑器 |
+| 主动工具协议 | 向量、关键词、Tavily、结果回填和多轮续写 | 新增“工具”页；向量、关键词、联网三项可独立开关，最多自动续写4轮，结果用 `active_tool_results` 回填 | 协议形状对齐；联网需要宿主受控搜索桥 |
 | 插件生态 | 宿主级功能较多，但非卡内 SDK | 本地插件清单、权限、依赖、顺序、清理；递归与模型补丁守卫已有真实实现 | 模板更适合卡内模块，但插件数量仍少 |
 | 命令系统 | `triggerSlash` 和宿主命令 | 仅桥接，注册系统待完成 | RP-Hub 更强 |
 | Renderer | 聊天和可执行 HTML | Galgame、电子书、战棋可插拔接口 | 模板方向更适合复杂卡 |
@@ -83,8 +85,7 @@ prelude
 
 ## 下一阶段优先级
 
-1. 补齐最新 RP-Hub 的 classicMemory 逐轮替换语义；
-2. 向量 int8 压缩、主动记忆工具和任务队列；
-3. Prompt Regex 与 UI Template 上下文兼容；
-4. Command Registry；
-5. 首个 Galgame 或战棋应用包接入。
+1. 向量 int8 压缩、后台任务队列和重试；
+2. 宿主受控的联网搜索桥；
+3. Command Registry；
+4. 首个 Galgame 或战棋应用包接入。

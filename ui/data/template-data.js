@@ -15,6 +15,45 @@
       embedding: { label: '向量嵌入', inherit: 'embedding', model: '', dimensions: null },
       summary: { label: '历史总结', inherit: 'summarize', model: '', temperature: 0.2 }
     },
+    regexScripts: [
+      {
+        id: 'runtime.style-priority',
+        name: 'Style Priority',
+        enabled: true,
+        scope: 'character',
+        promptOnly: true,
+        placement: [1],
+        regex: '^$',
+        replacement: '',
+        description: '系统风格优先级由预设决定，开场白和历史只提供事实，不复制其文风。'
+      }
+    ],
+    tools: [
+      {
+        id: 'tool_memory',
+        name: '向量记忆',
+        type: 'vector_memory',
+        callName: 'tool_memory',
+        enabled: false,
+        resultCount: 5
+      },
+      {
+        id: 'tool_grep',
+        name: '关键词检索',
+        type: 'keyword_dialogue',
+        callName: 'tool_grep',
+        enabled: false,
+        resultCount: 5
+      },
+      {
+        id: 'tool_web',
+        name: '联网搜索',
+        type: 'web_search',
+        callName: 'tool_web',
+        enabled: false,
+        resultCount: 5
+      }
+    ],
     presets: [],
     worldbookSettings: {
       scanDepth: 2,

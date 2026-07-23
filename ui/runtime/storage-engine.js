@@ -44,6 +44,7 @@
     presetCustom: [],
     presetEdits: {},
     modelRoutes: {},
+    toolEnabled: {},
     reducedMotion: false,
     memoryModules: {
       vectorEnabled: false,

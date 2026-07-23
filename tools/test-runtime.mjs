@@ -58,6 +58,7 @@ for (const relative of [
   'ui/runtime/storage-engine.js',
   'ui/runtime/preset-store.js',
   'ui/runtime/state-guard.js',
+  'ui/runtime/regex-engine.js',
   'ui/runtime/plugin-runtime.js',
   'ui/runtime/worldbook-engine.js',
   'ui/runtime/worldbook-patch-store.js',
@@ -115,6 +116,7 @@ assert.equal(sandbox.RPPresets.byId(importedPresets.imported[0].id).name, '已�
 sandbox.RPPresets.reset();
 
 const compiledPrompt = await sandbox.RPPrompt.compile('检查世界书递归扫描');
+assert(compiledPrompt.messages.some(message => message.content.includes('[Style Priority]')));
 assert.equal(JSON.stringify(compiledPrompt.messages.slice(0, 6).map(message => message.source)), JSON.stringify([
   'preset:rphub-official-01',
   'worldbook:system-top:runtime-contract',
