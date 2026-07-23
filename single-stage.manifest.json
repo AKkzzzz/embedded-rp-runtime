@@ -4,6 +4,14 @@
   "appId": "nanami-embedded-rp-runtime-template",
   "marker": "<<<nanami_embedded_rp_runtime_v1>>>",
   "storagePrefix": "nanami_embedded_rp_runtime_v1",
+  "provenance": {
+    "owner": "AKkzzzz",
+    "projectType": "RP-Hub 单正则 + 插件功能的小卡底层",
+    "license": "Community Source-Available Non-Commercial",
+    "repositoryOwner": "AKkzzzz",
+    "repository": "",
+    "sourceNotice": "发布卡只包含压缩运行产物；开发源码、测试和构建工具不随卡分发。"
+  },
   "entryHtml": "ui/index.html",
   "startupMode": "debug",
   "worldbook": {

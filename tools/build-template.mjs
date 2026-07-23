@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -62,6 +63,7 @@ function launcher(inner) {
 }
 
 const inner = inlineUi();
+const sourceHash = crypto.createHash('sha256').update(inner).digest('hex');
 const replacement = launcher(inner);
 const regex = manifest.marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const regexScript = {
@@ -93,7 +95,16 @@ const card = {
         schemaVersion: manifest.schemaVersion,
         appId: manifest.appId,
         mode: manifest.mode,
-        version: '0.1.0-debug'
+        version: '0.1.0-debug',
+        provenance: {
+          owner: manifest.provenance && manifest.provenance.owner || 'AKkzzzz',
+          projectType: manifest.provenance && manifest.provenance.projectType || 'RP-Hub 单正则 + 插件功能的小卡底层',
+          license: manifest.provenance && manifest.provenance.license || 'Community Source-Available Non-Commercial',
+          repositoryOwner: manifest.provenance && manifest.provenance.repositoryOwner || 'AKkzzzz',
+          repository: manifest.provenance && manifest.provenance.repository || '',
+          sourceNotice: manifest.provenance && manifest.provenance.sourceNotice || '',
+          sourceHash: 'sha256:' + sourceHash
+        }
       }
     }
   }

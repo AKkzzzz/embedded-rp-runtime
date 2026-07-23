@@ -1,5 +1,14 @@
 # 架构参考与许可证边界
 
+## 本运行时身份
+
+- 维护者 / 版权标识：`AKkzzzz`；
+- 项目定位：RP-Hub 单正则 + 插件功能的小卡底层；
+- 社区许可：见 `LICENSE-COMMUNITY-NONCOMMERCIAL.txt`；
+- 发布规则：正式卡只携带压缩运行产物，不携带本仓库的模块化源码、测试或构建工具；
+- 每个发布包的 `embedded_runtime_manifest.provenance.sourceHash` 是内嵌运行 HTML 的 SHA-256，用于核对构建来源；
+- `single-stage.manifest.json` 中的 `repository` 暂留为空，待绑定确切的 GitHub 仓库 URL 后再写入，避免误指向同名个人主页仓库。
+
 本模板的实现代码为当前项目新写代码。参考项目用于研究架构和交互概念，没有把远程项目源代码直接复制进卡。
 
 ## 参考
