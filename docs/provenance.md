@@ -28,3 +28,9 @@
 - `adapted: false`。
 
 这些预设延续非商业与署名要求。提示词正文、角色和默认启停状态与官方快照逐项一致；模板只补充内部 ID、注入阶段、顺位和来源元数据。
+
+## RP-Hub 世界书兼容层
+
+`ui/runtime/worldbook-engine.js` 与 `ui/runtime/prompt-compiler.js` 参考本地 RP-Hub `092ab90` 的字段归一化、历史扫描、概率判定和七类位置注入语义重新实现，并保留源码注释署名。模板没有复制 RP-Hub 的整段应用代码；兼容层继续遵守 CC BY-NC 4.0。
+
+模板额外提供 RP-Hub 当前没有的显式 `dependencies` 递归、状态触发、可选字符预算和事务化模型补丁。这些扩展不会写入标准 RP-Hub 世界书导出字段。

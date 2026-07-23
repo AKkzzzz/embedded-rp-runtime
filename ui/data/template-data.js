@@ -15,6 +15,12 @@
       embedding: { label: '向量嵌入', inherit: 'embedding', model: '', dimensions: null }
     },
     presets: [],
+    worldbookSettings: {
+      scanDepth: 2,
+      maxScanDepth: 0,
+      charBudget: 0,
+      maxDependencyDepth: 3
+    },
     worldbook: [
       {
         id: 'runtime-contract',
@@ -175,13 +181,13 @@
       },
       {
         id: 'runtime.patch.guard',
-        name: 'Patch Guard',
+        name: 'Model Patch Guard',
         version: '1.0.0',
         priority: 60,
         enabled: true,
         requires: [],
         optional: [],
-        capabilities: ['state:validate', 'worldbook:patch:validate']
+        capabilities: ['worldbook:patch:validate']
       }
     ],
     memory: {

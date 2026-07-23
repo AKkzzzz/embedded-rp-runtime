@@ -45,11 +45,48 @@
       manifest: Object.assign({}, manifest),
       implementation: implementation || {},
       enabled: errors.length ? false : preference(manifest.id, manifest.enabled !== false),
-      status: errors.length ? 'invalid' : 'ready',
+      status: errors.length ? 'invalid' : (implementation ? 'ready' : 'unbound'),
       errors: errors.map(function (message) { return { message: message, at: new Date().toISOString() }; }),
       calls: 0,
       totalMs: 0
     });
+  }
+
+  function attach(id, implementation) {
+    var record = records.get(id);
+    if (!record || record.status === 'invalid' || !implementation || typeof implementation !== 'object') return false;
+    record.implementation = implementation;
+    record.status = 'ready';
+    return true;
+  }
+
+  function isEnabled(id) {
+    var record = records.get(id);
+    return Boolean(record && record.enabled && record.status !== 'invalid' && record.status !== 'unbound');
+  }
+
+  function call(id, method, context) {
+    var record = records.get(id);
+    if (!record || !record.enabled || record.status === 'invalid' || record.status === 'unbound') {
+      return { called: false, value: context };
+    }
+    var handler = record.implementation && record.implementation[method];
+    if (typeof handler !== 'function') return { called: false, value: context };
+    var started = performance.now();
+    try {
+      var result = handler(context, { id: record.manifest.id });
+      record.status = 'ready';
+      record.calls += 1;
+      record.totalMs += performance.now() - started;
+      return { called: true, value: result === undefined ? context : result };
+    } catch (error) {
+      record.status = 'error';
+      record.errors.push({ method: method, message: String(error.message || error), at: new Date().toISOString() });
+      record.errors = record.errors.slice(-10);
+      record.calls += 1;
+      record.totalMs += performance.now() - started;
+      return { called: true, value: context, error: error };
+    }
   }
 
   function dependencyOrder() {
@@ -90,6 +127,7 @@
       if (typeof record.implementation.dispose === 'function') await record.implementation.dispose();
     }
     record.enabled = enabled;
+    if (enabled && typeof record.implementation.activate === 'function') await record.implementation.activate();
     var preferences = window.RPStorage.getPreferences();
     var next = Object.assign({}, preferences.pluginEnabled || {});
     next[id] = enabled;
@@ -123,6 +161,9 @@
 
   window.RPPlugins = {
     register: register,
+    attach: attach,
+    isEnabled: isEnabled,
+    call: call,
     run: run,
     list: list,
     setEnabled: setEnabled

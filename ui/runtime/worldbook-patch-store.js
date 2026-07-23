@@ -20,19 +20,27 @@
   function validateEntry(entry) {
     var errors = [];
     if (!entry || typeof entry !== 'object') return ['entry must be an object'];
+    var normalized = window.RPWorldbook.normalizeEntry(entry, 0);
     if (!/^[a-z0-9][a-z0-9._-]{2,119}$/i.test(entry.id || '')) errors.push('entry.id is invalid');
-    if (!String(entry.name || '').trim()) errors.push('entry.name is required');
-    if (!String(entry.content || '').trim()) errors.push('entry.content is required');
-    if (String(entry.content || '').length > 30000) errors.push('entry.content exceeds 30000 characters');
-    if (['user', 'memory-derived', 'imported'].indexOf(entry.source) === -1) errors.push('entry.source is invalid');
-    var trigger = entry.trigger || {};
+    if (!String(normalized.name || '').trim()) errors.push('entry.name is required');
+    if (!String(normalized.content || '').trim()) errors.push('entry.content is required');
+    if (String(normalized.content || '').length > 30000) errors.push('entry.content exceeds 30000 characters');
+    if (['user', 'memory-derived', 'imported'].indexOf(normalized.source) === -1) errors.push('entry.source is invalid');
+    var trigger = normalized.trigger || {};
     if (['constant', 'literal', 'regex', 'state', 'semantic'].indexOf(trigger.type) === -1) errors.push('entry.trigger.type is invalid');
     if (trigger.type === 'literal' && !(trigger.keys || []).length) errors.push('literal trigger needs keys');
     if (trigger.type === 'regex' && !(trigger.patterns || []).length) errors.push('regex trigger needs patterns');
+    var rawProbability = entry.probability === undefined ? 100 : Number(entry.probability);
+    if (!Number.isFinite(rawProbability) || rawProbability < 0 || rawProbability > 100) errors.push('entry.probability is outside 0..100');
+    var rawScanDepth = entry.scanDepth !== undefined ? entry.scanDepth : entry.scan_depth;
+    if (rawScanDepth !== undefined && rawScanDepth !== null && (!Number.isFinite(Number(rawScanDepth)) || Number(rawScanDepth) < 0)) {
+      errors.push('entry.scanDepth must be non-negative');
+    }
+    if (normalized.dependencies.indexOf(normalized.id) !== -1) errors.push('entry cannot depend on itself');
     return errors;
   }
 
-  function validateProposal(proposal) {
+  function validateProposalCore(proposal) {
     var state = canonical();
     var errors = [];
     if (!proposal || typeof proposal !== 'object') return { ok: false, errors: ['proposal must be an object'] };
@@ -63,6 +71,22 @@
       }
     });
     return { ok: errors.length === 0, errors: errors };
+  }
+
+  window.RPPlugins.attach('runtime.patch.guard', {
+    validateProposal: validateProposalCore,
+    validateState: function (payload) {
+      return window.RPStateGuard.validate(payload.value, payload.schema);
+    }
+  });
+
+  function validateProposal(proposal) {
+    if (!window.RPPlugins.isEnabled('runtime.patch.guard')) {
+      return { ok: false, errors: ['model patch guard plugin is disabled'] };
+    }
+    var result = window.RPPlugins.call('runtime.patch.guard', 'validateProposal', proposal);
+    if (result.error) return { ok: false, errors: [String(result.error.message || result.error)] };
+    return result.value;
   }
 
   function propose(proposal) {

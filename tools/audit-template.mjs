@@ -73,10 +73,10 @@ const runtimeFiles = [
   'ui/runtime/state-guard.js',
   'ui/runtime/host-bridge.js',
   'ui/runtime/model-gateway.js',
-  'ui/runtime/worldbook-patch-store.js',
-  'ui/runtime/worldbook-engine.js',
-  'ui/runtime/memory-engine.js',
   'ui/runtime/plugin-runtime.js',
+  'ui/runtime/worldbook-engine.js',
+  'ui/runtime/worldbook-patch-store.js',
+  'ui/runtime/memory-engine.js',
   'ui/runtime/prompt-compiler.js',
   'ui/runtime/diagnostics.js',
   'ui/scripts/preset-manager.js',
@@ -111,6 +111,13 @@ for (const plugin of templateData.plugins) {
   if (!plugin.id || pluginIds.has(plugin.id)) throw new Error(`invalid or duplicate plugin id: ${plugin.id}`);
   pluginIds.add(plugin.id);
   if (!Number.isFinite(plugin.priority)) throw new Error(`invalid plugin priority: ${plugin.id}`);
+}
+
+const worldbookSettings = templateData.worldbookSettings || {};
+for (const key of ['scanDepth', 'maxScanDepth', 'charBudget', 'maxDependencyDepth']) {
+  if (!Number.isFinite(worldbookSettings[key]) || worldbookSettings[key] < 0) {
+    throw new Error(`invalid worldbook setting: ${key}`);
+  }
 }
 
 const presetIds = new Set();

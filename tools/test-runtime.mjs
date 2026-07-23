@@ -58,10 +58,10 @@ for (const relative of [
   'ui/runtime/storage-engine.js',
   'ui/runtime/preset-store.js',
   'ui/runtime/state-guard.js',
-  'ui/runtime/worldbook-patch-store.js',
-  'ui/runtime/worldbook-engine.js',
-  'ui/runtime/memory-engine.js',
   'ui/runtime/plugin-runtime.js',
+  'ui/runtime/worldbook-engine.js',
+  'ui/runtime/worldbook-patch-store.js',
+  'ui/runtime/memory-engine.js',
   'ui/runtime/prompt-compiler.js'
 ]) {
   vm.runInContext(fs.readFileSync(path.join(root, relative), 'utf8'), sandbox, { filename: relative });
@@ -117,15 +117,109 @@ sandbox.RPPresets.reset();
 const compiledPrompt = await sandbox.RPPrompt.compile('检查世界书递归扫描');
 assert.equal(JSON.stringify(compiledPrompt.messages.slice(0, 6).map(message => message.source)), JSON.stringify([
   'preset:rphub-official-01',
-  'worldbook:runtime-contract',
-  'worldbook:example-regex-trigger',
+  'worldbook:system-top:runtime-contract',
   'presets:system-support',
   'preset:rphub-official-02',
-  'preset:rphub-official-03'
+  'preset:rphub-official-03',
+  'preset:rphub-official-04'
 ]));
+assert(compiledPrompt.messages.some(message => message.source === 'character:context' && message.content.includes('递归检索必须')));
 
 const retrieval = sandbox.RPWorldbook.retrieve('请检查世界书递归扫描');
 assert.deepEqual(retrieval.hits.map(hit => hit.id), ['runtime-contract', 'example-regex-trigger']);
+
+const rpHubFixtures = [
+  { id: 'history-hit', comment: '历史命中', content: '历史扫描已生效。', keys: ['旧港口'], scanDepth: 2, position: 'user_top', order: 10 },
+  { id: 'probability-zero', comment: '概率零', content: '不应命中。', keys: ['概率测试'], probability: 0, position: 'at_depth' },
+  { id: 'dependency-parent', comment: '依赖父项', content: '父项。', keys: ['依赖测试'], dependencies: ['dependency-child'], position: 'before_char' },
+  { id: 'dependency-child', comment: '依赖子项', content: '子项。', keys: ['不会直接命中的词'], position: 'after_char' },
+  { id: 'position-system', comment: '系统顶部', content: 'system top', keys: ['位置测试'], position: 'system_top', order: 1 },
+  { id: 'position-global', comment: '全局注释', content: 'global note', keys: ['位置测试'], position: 'global_note', order: 2 },
+  { id: 'position-before', comment: '角色之前', content: 'before char', keys: ['位置测试'], position: 'before_char', order: 3 },
+  { id: 'position-after', comment: '角色之后', content: 'after char', keys: ['位置测试'], position: 'after_char', order: 4 },
+  { id: 'position-depth', comment: '历史深度', content: 'at depth', keys: ['位置测试'], position: 'at_depth', depth: 1, order: 5 },
+  { id: 'position-user', comment: '用户顶部', content: 'user top', keys: ['位置测试'], position: 'user_top', order: 6 },
+  { id: 'position-assistant', comment: '助手顶部', content: 'assistant top', keys: ['位置测试'], position: 'assistant_top', order: 7 }
+].map(entry => ({ ...entry, enabled: true, scope: 'character' }));
+sandbox.RPTemplateData.worldbook.push(...rpHubFixtures);
+
+const historyRetrieval = sandbox.RPWorldbook.retrieve('继续前进', {
+  history: [
+    { role: 'user', content: '我们刚才经过旧港口。' },
+    { role: 'user', content: '那里正在下雨。' }
+  ]
+});
+assert(historyRetrieval.hits.some(hit => hit.id === 'history-hit'));
+const expiredHistory = sandbox.RPWorldbook.retrieve('继续前进', {
+  history: [
+    { role: 'user', content: '我们刚才经过旧港口。' },
+    { role: 'assistant', content: '第一段回应。' },
+    { role: 'user', content: '第二段提问。' },
+    { role: 'assistant', content: '第三段回应。' }
+  ]
+});
+assert(!expiredHistory.hits.some(hit => hit.id === 'history-hit'));
+assert(!sandbox.RPWorldbook.retrieve('概率测试', { random: () => 0 }).hits.some(hit => hit.id === 'probability-zero'));
+const compatibilityFixtures = [
+  { id: 'constant-zero', comment: '零概率常驻', content: '仍应命中。', constant: true, probability: 0 },
+  { id: 'invalid-regex', comment: '非法正则', content: '不得中断。', keys: ['/[invalid/'], useRegex: true }
+].concat(Array.from({ length: 13 }, (_, index) => ({
+  id: 'bulk-hit-' + index,
+  comment: '批量命中 ' + index,
+  content: '批量内容 ' + index,
+  keys: ['批量命中']
+}))).map(entry => ({ ...entry, enabled: true, scope: 'character', position: 'at_depth' }));
+sandbox.RPTemplateData.worldbook.push(...compatibilityFixtures);
+const zeroDepth = sandbox.RPWorldbook.retrieve('批量命中', { scanDepth: 0 });
+assert(zeroDepth.hits.some(hit => hit.id === 'constant-zero'));
+assert.equal(zeroDepth.hits.filter(hit => hit.id.startsWith('bulk-hit-')).length, 0);
+const allBulkHits = sandbox.RPWorldbook.retrieve('批量命中');
+assert.equal(allBulkHits.hits.filter(hit => hit.id.startsWith('bulk-hit-')).length, 13);
+assert.doesNotThrow(() => sandbox.RPWorldbook.retrieve('非法正则'));
+assert(!sandbox.RPWorldbook.retrieve('继续', {
+  history: [{ role: 'user', content: '旧港口' }, { role: 'assistant', content: '已经离开。' }],
+  maxDepth: 1
+}).hits.some(hit => hit.id === 'history-hit'));
+const extensionOverride = sandbox.RPWorldbook.normalizeEntry({
+  comment: '根字段',
+  content: '根内容',
+  keys: ['根关键词'],
+  extensions: { comment: '扩展字段', keys: ['扩展关键词'], position: 'user_top' }
+}, 0);
+assert.equal(extensionOverride.comment, '扩展字段');
+assert.deepEqual(extensionOverride.keys, ['扩展关键词']);
+assert.equal(extensionOverride.position, 'user_top');
+
+sandbox.RPWorldbook.setEnabled('dependency-child', false);
+const disabledDependency = sandbox.RPWorldbook.retrieve('依赖测试');
+assert.deepEqual(disabledDependency.hits.filter(hit => hit.id.startsWith('dependency-')).map(hit => hit.id), ['dependency-parent']);
+assert(disabledDependency.diagnostics.some(item => item.id === 'dependency-child' && item.reason === 'dependency-disabled'));
+sandbox.RPWorldbook.setEnabled('dependency-child', true);
+assert.deepEqual(
+  sandbox.RPWorldbook.retrieve('依赖测试').hits.filter(hit => hit.id.startsWith('dependency-')).map(hit => hit.id),
+  ['dependency-parent', 'dependency-child']
+);
+await sandbox.RPPlugins.setEnabled('runtime.worldbook.recursion', false);
+assert.deepEqual(
+  sandbox.RPWorldbook.retrieve('依赖测试').hits.filter(hit => hit.id.startsWith('dependency-')).map(hit => hit.id),
+  ['dependency-parent']
+);
+await sandbox.RPPlugins.setEnabled('runtime.worldbook.recursion', true);
+
+const placementPrompt = await sandbox.RPPrompt.compile('位置测试', {
+  history: [{ role: 'assistant', content: '上一轮。' }],
+  character: { name: '测试角色', personality: '谨慎' }
+});
+assert(placementPrompt.messages.some(message => message.source === 'worldbook:system-top:position-system'));
+assert(placementPrompt.messages.some(message => message.source === 'worldbook:global-note:position-global'));
+assert(placementPrompt.messages.some(message => message.source === 'character:context' && message.content.includes('before char') && message.content.includes('after char')));
+assert(placementPrompt.messages.some(message => message.source === 'worldbook:at-depth:position-depth' && message.role === 'user'));
+assert(placementPrompt.messages.find(message => message.source === 'input').content.startsWith('【用户顶部】'));
+assert.equal(placementPrompt.messages.at(-1).source, 'worldbook:assistant-top');
+
+await sandbox.RPPlugins.setEnabled('runtime.patch.guard', false);
+assert.equal(sandbox.RPWorldbookPatches.validateProposal({}).errors[0], 'model patch guard plugin is disabled');
+await sandbox.RPPlugins.setEnabled('runtime.patch.guard', true);
 
 const staleProposal = sandbox.RPWorldbookPatches.validateProposal({
   baseRevision: 0,
@@ -183,6 +277,40 @@ const lockedEdit = sandbox.RPWorldbookPatches.validateProposal({
 assert.equal(lockedEdit.ok, false);
 assert(lockedEdit.errors.some(error => error.includes('author-locked')));
 
+const importedWorldbook = sandbox.RPWorldbook.importRpHub({
+  entries: [
+    {
+      comment: 'RP-Hub 往返测试',
+      content: '官方字段必须保持。',
+      enabled: true,
+      scope: 'global',
+      keys: ['往返测试'],
+      useRegex: false,
+      constant: false,
+      position: 'at_depth',
+      order: 42,
+      depth: 3,
+      scanDepth: 4,
+      probability: 75,
+      useProbability: true
+    }
+  ]
+});
+assert.equal(importedWorldbook.ok, true);
+const exportedWorldbook = sandbox.RPWorldbook.exportRpHub([importedWorldbook.imported[0].id]);
+assert.equal(exportedWorldbook.length, 1);
+assert.deepEqual(Object.keys(exportedWorldbook[0]), [
+  'comment', 'content', 'enabled', 'scope', 'keys', 'useRegex', 'constant',
+  'position', 'order', 'depth', 'scanDepth', 'probability', 'useProbability'
+]);
+assert.equal(exportedWorldbook[0].scope, 'global');
+assert.equal(exportedWorldbook[0].probability, 75);
+
+const pluginStates = sandbox.RPPlugins.list();
+assert(pluginStates.every(plugin => plugin.status === 'ready'));
+assert(pluginStates.find(plugin => plugin.id === 'runtime.worldbook.recursion').calls > 0);
+assert(pluginStates.find(plugin => plugin.id === 'runtime.patch.guard').calls > 0);
+
 console.log(JSON.stringify({
   ok: true,
   initialStateValid: true,
@@ -191,6 +319,8 @@ console.log(JSON.stringify({
   officialDefaults: sandbox.RPPresets.list().slice(0, 15).every(preset => preset.builtin),
   promptOrder: compiledPrompt.messages.slice(0, 6).map(message => message.source),
   retrievalHits: retrieval.hits.map(hit => hit.id),
+  rpHubWorldbookCompatibility: true,
+  realPluginImplementations: true,
   committedRevision: committed.revision,
   lockedEditRejected: true
 }, null, 2));

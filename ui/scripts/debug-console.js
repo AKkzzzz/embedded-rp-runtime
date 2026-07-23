@@ -23,6 +23,16 @@
       escapeHtml(title) + '</h2><p>' + escapeHtml(description) + '</p></div>' + (action || '') + '</header>';
   }
 
+  function downloadJson(name, value) {
+    var blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
   function renderOverview() {
     var target = page('overview');
     var diagnostic = window.RPDiagnostics.snapshot();
@@ -91,13 +101,33 @@
       escapeHtml(JSON.stringify({ hits: result.hits, diagnostics: result.diagnostics }, null, 2)) + '</pre></article>' : '';
     target.innerHTML = pageHead(
       '世界书与扫描规则',
-      '支持常驻、字面、正则、状态与未来语义触发；依赖条目递归展开并受深度、去重和预算限制。'
+      '兼容 RP-Hub 的历史扫描、概率与七类位置；显式依赖可递归展开，并受深度、去重和可选预算限制。',
+      '<button type="button" class="secondary" id="importWorldbook">导入 RP-Hub</button>' +
+      '<input id="worldbookImportFile" type="file" accept=".json,application/json" hidden>' +
+      '<button type="button" class="secondary" id="exportWorldbook">导出全部</button>'
     ) +
       '<div class="card-grid" style="margin-bottom:10px"><article class="debug-card"><div class="metric"><span>知识库修订</span><strong>' + knowledge.revision + '</strong></div></article>' +
       '<article class="debug-card"><div class="metric"><span>运行时条目</span><strong>' + knowledge.entries.length + '</strong></div></article>' +
       '<article class="debug-card"><div class="metric"><span>待审提案</span><strong>' + proposals.filter(function (item) { return item.status === 'pending'; }).length + '</strong></div></article></div>' +
       '<div class="control-line"><input id="worldbookQuery" value="我想检查世界书递归扫描" aria-label="模拟扫描文本"><button id="scanWorldbook">模拟扫描</button></div>' +
       '<div class="debug-card"><div class="row-list">' + rows + '</div></div><div class="card-grid">' + resultHtml + '</div>';
+    target.querySelector('#importWorldbook').onclick = function () {
+      target.querySelector('#worldbookImportFile').click();
+    };
+    target.querySelector('#worldbookImportFile').onchange = async function () {
+      var file = this.files && this.files[0];
+      if (!file) return;
+      try {
+        var imported = window.RPWorldbook.importRpHub(JSON.parse(await file.text()));
+        if (!imported.ok) throw new Error(imported.errors.join('；') || '没有可导入条目');
+        renderWorldbook();
+      } catch (error) {
+        alert('世界书导入失败：' + error.message);
+      }
+    };
+    target.querySelector('#exportWorldbook').onclick = function () {
+      downloadJson('worldbook.json', { entries: window.RPWorldbook.exportRpHub() });
+    };
     target.querySelectorAll('[data-worldbook-toggle]').forEach(function (button) {
       button.onclick = function () {
         var entry = window.RPWorldbook.byId(button.dataset.worldbookToggle);
@@ -150,7 +180,7 @@
     var target = page('plugins');
     var rows = window.RPPlugins.list().map(function (plugin) {
       return '<div class="data-row"><div><strong>' + escapeHtml(plugin.name) + '</strong><div class="tiny">' + escapeHtml(plugin.id + '@' + plugin.version) + '</div></div>' +
-        '<div><div class="tiny">' + escapeHtml(plugin.capabilities.join(' · ')) + '</div><div class="tiny">调用 ' + plugin.calls + ' · 平均 ' + plugin.averageMs + 'ms</div></div>' +
+        '<div><div class="tiny">' + escapeHtml(plugin.capabilities.join(' · ')) + '</div><div class="tiny">' + escapeHtml(plugin.status) + ' · 调用 ' + plugin.calls + ' · 平均 ' + plugin.averageMs + 'ms</div></div>' +
         '<button type="button" data-plugin-toggle="' + escapeHtml(plugin.id) + '">' + (plugin.enabled ? '启用' : '关闭') + '</button></div>';
     }).join('');
     target.innerHTML = pageHead(
@@ -209,7 +239,22 @@
     renderDiagnostics();
   }
 
+  function renderPage(id) {
+    var renderers = {
+      overview: renderOverview,
+      models: renderModels,
+      worldbook: renderWorldbook,
+      state: renderState,
+      presets: renderPresets,
+      plugins: renderPlugins,
+      memory: renderMemory,
+      diagnostics: renderDiagnostics
+    };
+    if (renderers[id]) renderers[id]();
+  }
+
   function activate(id) {
+    renderPage(id);
     document.querySelectorAll('[data-page]').forEach(function (button) {
       button.classList.toggle('active', button.dataset.page === id);
     });
@@ -221,6 +266,7 @@
 
   window.RPDebugConsole = {
     renderAll: renderAll,
+    renderPage: renderPage,
     activate: activate
   };
 })();
