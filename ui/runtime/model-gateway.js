@@ -227,7 +227,8 @@
             return { role: message.role, content: String(message.content || '') };
           }),
           temperature: context.options.temperature,
-          stream: context.options.stream
+          stream: context.options.stream,
+          ...(context.options.stream ? { stream_options: { include_usage: true } } : {})
         }),
         signal: options.signal
       });
