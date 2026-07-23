@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "mode": "embedded-rp-runtime",
+  "appId": "nanami-embedded-rp-runtime-template",
+  "marker": "<<<nanami_embedded_rp_runtime_v1>>>",
+  "storagePrefix": "nanami_embedded_rp_runtime_v1",
+  "entryHtml": "ui/index.html",
+  "startupMode": "debug",
+  "worldbook": {
+    "selectiveLimit": 12,
+    "charBudget": 26000,
+    "maxDependencyDepth": 3,
+    "scanMessageLimit": 12,
+    "failOnCycle": false
+  },
+  "memory": {
+    "structuredEnabled": true,
+    "vectorEnabled": false,
+    "vectorTopK": 8,
+    "similarityThreshold": 0.3,
+    "chunkChars": 700,
+    "chunkOverlap": 100
+  },
+  "models": {
+    "routes": [
+      "narrative",
+      "state",
+      "summarize",
+      "embedding"
+    ],
+    "credentialPolicy": "host-proxy-only",
+    "fallbackMode": "trigger-slash"
+  },
+  "plugins": [
+    {
+      "id": "runtime.worldbook.recursion",
+      "version": "1.0.0",
+      "enabled": true,
+      "priority": 40,
+      "requires": [],
+      "optional": [],
+      "capabilities": [
+        "worldbook:read",
+        "retrieval:extend"
+      ]
+    },
+    {
+      "id": "runtime.patch.guard",
+      "version": "1.0.0",
+      "enabled": true,
+      "priority": 60,
+      "requires": [],
+      "optional": [],
+      "capabilities": [
+        "state:validate",
+        "worldbook:patch:validate"
+      ]
+    }
+  ],
+  "stage": {
+    "desktop": {
+      "maxWidth": 1280,
+      "aspectRatio": "16/9",
+      "viewportGap": 24,
+      "heightGap": 72
+    },
+    "mobile": {
+      "breakpoint": 720,
+      "aspectRatio": "9/16",
+      "viewportGap": 0,
+      "heightGap": 0
+    }
+  }
+}

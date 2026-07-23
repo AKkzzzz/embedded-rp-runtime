@@ -1,0 +1,229 @@
+(function () {
+  'use strict';
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function page(id) {
+    return document.querySelector('[data-debug-page="' + id + '"]');
+  }
+
+  function badge(value, type) {
+    return '<span class="badge ' + (type || '') + '">' + escapeHtml(value) + '</span>';
+  }
+
+  function pageHead(title, description, action) {
+    return '<header class="page-head"><div><p class="eyebrow">RUNTIME INSPECTOR</p><h2>' +
+      escapeHtml(title) + '</h2><p>' + escapeHtml(description) + '</p></div>' + (action || '') + '</header>';
+  }
+
+  function renderOverview() {
+    var target = page('overview');
+    var diagnostic = window.RPDiagnostics.snapshot();
+    var worldbook = diagnostic.worldbook;
+    var memory = diagnostic.memory;
+    var capabilityCount = Object.keys(diagnostic.host).filter(function (key) {
+      return diagnostic.host[key] === true;
+    }).length;
+    target.innerHTML = pageHead(
+      '运行时总览',
+      '这里显示卡内内核是否具备开始应用所需的基础能力。Debug 模式不会推进故事。'
+    ) +
+      '<div class="card-grid">' +
+        '<article class="debug-card"><p class="eyebrow">HOST</p><div class="metric"><span>增强能力</span><strong>' + capabilityCount + '</strong></div><p class="tiny">' + escapeHtml(diagnostic.host.host) + '</p></article>' +
+        '<article class="debug-card"><p class="eyebrow">WORLDBOOK</p><div class="metric"><span>启用条目</span><strong>' + worldbook.enabled + '/' + worldbook.total + '</strong></div><p class="tiny">递归和预算由卡内引擎处理</p></article>' +
+        '<article class="debug-card"><p class="eyebrow">MEMORY</p><div class="metric"><span>向量覆盖率</span><strong>' + memory.vectorCoverage + '%</strong></div><p class="tiny">' + memory.structured + ' 条结构化记忆</p></article>' +
+        '<article class="debug-card wide"><p class="eyebrow">STARTUP GATE</p><h3>Debug 后台 → 选择应用 → Renderer 接管</h3><p class="muted">底层服务不会因切换表现层而重建。Galgame、电子书和战棋共用相同的世界书、状态、记忆、模型路由与插件生命周期。</p></article>' +
+      '</div>';
+  }
+
+  function renderModels() {
+    var target = page('models');
+    var caps = window.RPHost.capabilities();
+    var routes = window.RPModels.routes();
+    var rows = Object.keys(routes).map(function (id) {
+      var route = routes[id];
+      var available = id === 'embedding' ? caps.embeddings : caps.generation;
+      return '<div class="data-row"><div><strong>' + escapeHtml(route.label) + '</strong><div class="tiny">' + escapeHtml(id) + '</div></div>' +
+        '<div><code>' + escapeHtml(route.model || '继承宿主：' + route.inherit) + '</code></div>' +
+        badge(available ? '桥接可用' : '等待宿主', available ? 'ok' : 'warn') + '</div>';
+    }).join('');
+    target.innerHTML = pageHead(
+      '模型路由',
+      '卡内只保存模型 ID 与参数，不保存 API Key。当前宿主未提供增强桥时，主叙事只能退回 triggerSlash。',
+      '<button type="button" class="secondary" id="refreshModels">刷新模型</button>'
+    ) + '<div class="debug-card"><div class="row-list">' + rows + '</div></div>';
+    target.querySelector('#refreshModels').onclick = async function () {
+      this.disabled = true;
+      await window.RPModels.refreshModels();
+      this.disabled = false;
+      renderModels();
+    };
+  }
+
+  function triggerSummary(entry) {
+    var trigger = entry.trigger || {};
+    if (trigger.type === 'constant') return '常驻';
+    if (trigger.type === 'literal') return '字面：' + (trigger.keys || []).join(' / ');
+    if (trigger.type === 'regex') return '正则：' + (trigger.patterns || []).join(' / ');
+    if (trigger.type === 'state') return '状态：' + trigger.path;
+    if (trigger.type === 'semantic') return '语义向量';
+    return trigger.type || '无';
+  }
+
+  function renderWorldbook(result) {
+    var target = page('worldbook');
+    var entries = window.RPWorldbook.list();
+    var knowledge = window.RPStorage.getCanonical().knowledge;
+    var proposals = window.RPWorldbookPatches.proposals();
+    var rows = entries.map(function (entry) {
+      return '<div class="data-row"><div><strong>' + escapeHtml(entry.name) + '</strong><div class="tiny">' + escapeHtml(entry.id) + '</div></div>' +
+        '<div><div>' + escapeHtml(triggerSummary(entry)) + '</div><div class="tiny">依赖 ' + escapeHtml((entry.dependencies || []).join(', ') || '无') + ' · ' + escapeHtml(entry.placement) + '</div></div>' +
+        '<button type="button" class="toggle" data-worldbook-toggle="' + escapeHtml(entry.id) + '">' + (entry.runtimeEnabled ? '启用' : '关闭') + '</button></div>';
+    }).join('');
+    var resultHtml = result ? '<article class="debug-card wide"><p class="eyebrow">SCAN RESULT</p><h3>命中 ' + result.hits.length + ' 条 · ' + result.usedChars + ' 字符</h3><pre>' +
+      escapeHtml(JSON.stringify({ hits: result.hits, diagnostics: result.diagnostics }, null, 2)) + '</pre></article>' : '';
+    target.innerHTML = pageHead(
+      '世界书与扫描规则',
+      '支持常驻、字面、正则、状态与未来语义触发；依赖条目递归展开并受深度、去重和预算限制。'
+    ) +
+      '<div class="card-grid" style="margin-bottom:10px"><article class="debug-card"><div class="metric"><span>知识库修订</span><strong>' + knowledge.revision + '</strong></div></article>' +
+      '<article class="debug-card"><div class="metric"><span>运行时条目</span><strong>' + knowledge.entries.length + '</strong></div></article>' +
+      '<article class="debug-card"><div class="metric"><span>待审提案</span><strong>' + proposals.filter(function (item) { return item.status === 'pending'; }).length + '</strong></div></article></div>' +
+      '<div class="control-line"><input id="worldbookQuery" value="我想检查世界书递归扫描" aria-label="模拟扫描文本"><button id="scanWorldbook">模拟扫描</button></div>' +
+      '<div class="debug-card"><div class="row-list">' + rows + '</div></div><div class="card-grid">' + resultHtml + '</div>';
+    target.querySelectorAll('[data-worldbook-toggle]').forEach(function (button) {
+      button.onclick = function () {
+        var entry = window.RPWorldbook.byId(button.dataset.worldbookToggle);
+        var runtimeEntry = window.RPWorldbook.list().find(function (item) { return item.id === entry.id; });
+        window.RPWorldbook.setEnabled(entry.id, !runtimeEntry.runtimeEnabled);
+        renderWorldbook(result);
+      };
+    });
+    target.querySelector('#scanWorldbook').onclick = function () {
+      renderWorldbook(window.RPWorldbook.retrieve(target.querySelector('#worldbookQuery').value));
+    };
+  }
+
+  function renderState() {
+    var target = page('state');
+    var current = window.RPStorage.getCanonical();
+    var validation = window.RPStateGuard.validate(current, window.RPTemplateData.stateSchema);
+    target.innerHTML = pageHead(
+      '变量与事务校验',
+      '未知字段、错误类型、非法枚举、越界值和只读字段会在写入前被拒绝；数组更新采用显式整体替换。'
+    ) +
+      '<div class="card-grid"><article class="debug-card">' +
+        '<p class="eyebrow">SCHEMA STATUS</p><h3>' + (validation.ok ? '当前状态合法' : '发现错误') + '</h3>' +
+        badge(validation.ok ? 'PASS' : 'FAIL', validation.ok ? 'ok' : 'error') +
+      '</article><article class="debug-card wide"><p class="eyebrow">CANONICAL STATE</p><pre>' +
+        escapeHtml(JSON.stringify(current, null, 2)) + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">PATCH TEST</p><textarea id="patchInput" rows="6" style="width:100%">{"runtime":{"mode":"game"}}</textarea><div class="control-line" style="margin-top:8px"><button id="validatePatch">只校验，不写入</button></div><pre id="patchResult"></pre></article></div>';
+    target.querySelector('#validatePatch').onclick = function () {
+      var output = target.querySelector('#patchResult');
+      try {
+        var patch = JSON.parse(target.querySelector('#patchInput').value);
+        var result = window.RPStateGuard.applyPatch(current, patch, window.RPTemplateData.stateSchema);
+        output.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        output.textContent = 'JSON 解析失败：' + error.message;
+      }
+    };
+  }
+
+  function renderPresets() {
+    var target = page('presets');
+    var rows = window.RPTemplateData.presets.map(function (preset) {
+      return '<div class="data-row stack"><div><strong>' + escapeHtml(preset.name) + '</strong> ' +
+        badge(preset.role + ' · ' + preset.order) + '</div><p class="muted">' + escapeHtml(preset.content) + '</p></div>';
+    }).join('');
+    target.innerHTML = pageHead(
+      '提示词预设',
+      '预设是 Prompt Compiler 的有序输入。应用包可以新增题材规则，但不能绕过状态与输出契约。'
+    ) + '<div class="debug-card"><div class="row-list">' + rows + '</div></div>';
+  }
+
+  function renderPlugins() {
+    var target = page('plugins');
+    var rows = window.RPPlugins.list().map(function (plugin) {
+      return '<div class="data-row"><div><strong>' + escapeHtml(plugin.name) + '</strong><div class="tiny">' + escapeHtml(plugin.id + '@' + plugin.version) + '</div></div>' +
+        '<div><div class="tiny">' + escapeHtml(plugin.capabilities.join(' · ')) + '</div><div class="tiny">调用 ' + plugin.calls + ' · 平均 ' + plugin.averageMs + 'ms</div></div>' +
+        '<button type="button" data-plugin-toggle="' + escapeHtml(plugin.id) + '">' + (plugin.enabled ? '启用' : '关闭') + '</button></div>';
+    }).join('');
+    target.innerHTML = pageHead(
+      '本地插件',
+      '插件在构建期打包，声明依赖、权限与优先级；关闭时清理自己创建的监听器和资源。'
+    ) + '<div class="debug-card"><div class="row-list">' + rows + '</div></div>';
+    target.querySelectorAll('[data-plugin-toggle]').forEach(function (button) {
+      button.onclick = async function () {
+        var plugin = window.RPPlugins.list().find(function (item) { return item.id === button.dataset.pluginToggle; });
+        await window.RPPlugins.setEnabled(plugin.id, !plugin.enabled);
+        renderPlugins();
+      };
+    });
+  }
+
+  function renderMemory() {
+    var target = page('memory');
+    var stats = window.RPMemory.stats();
+    var rows = window.RPMemory.listStructured().map(function (memory) {
+      return '<div class="data-row stack"><div><strong>' + escapeHtml(memory.title) + '</strong> ' + badge(memory.kind) + '</div><p class="muted">' +
+        escapeHtml(memory.summary) + '</p><div class="tiny">来源：' + escapeHtml((memory.sourceIds || []).join(', ')) + '</div></div>';
+    }).join('');
+    target.innerHTML = pageHead(
+      '结构化记忆与向量索引',
+      '结构化记忆保存已发生事实；向量只是带来源的检索索引。宿主未提供 embedding 桥时不会静默读取凭据。'
+    ) +
+      '<div class="card-grid"><article class="debug-card"><div class="metric"><span>结构化</span><strong>' + stats.structured + '</strong></div></article>' +
+      '<article class="debug-card"><div class="metric"><span>向量</span><strong>' + stats.vector + '</strong></div></article>' +
+      '<article class="debug-card"><div class="metric"><span>队列</span><strong>' + stats.queuePending + '</strong></div></article>' +
+      '<article class="debug-card wide"><div class="row-list">' + rows + '</div></article></div>';
+  }
+
+  function renderDiagnostics() {
+    var target = page('diagnostics');
+    target.innerHTML = pageHead(
+      '完整诊断快照',
+      '记录宿主能力、模型调用、世界书命中、变量校验、插件状态、事件和最近一次提示词编译。'
+    ) +
+      '<div class="control-line"><input id="promptTestInput" value="检查后台小酒馆的世界书扫描规则" aria-label="提示词编译测试"><button id="compilePrompt">编译测试</button></div>' +
+      '<article class="debug-card"><pre id="diagnosticOutput">' +
+        escapeHtml(JSON.stringify(window.RPDiagnostics.snapshot(), null, 2)) + '</pre></article>';
+    target.querySelector('#compilePrompt').onclick = async function () {
+      await window.RPPrompt.compile(target.querySelector('#promptTestInput').value);
+      target.querySelector('#diagnosticOutput').textContent = JSON.stringify(window.RPDiagnostics.snapshot(), null, 2);
+    };
+  }
+
+  function renderAll() {
+    renderOverview();
+    renderModels();
+    renderWorldbook();
+    renderState();
+    renderPresets();
+    renderPlugins();
+    renderMemory();
+    renderDiagnostics();
+  }
+
+  function activate(id) {
+    document.querySelectorAll('[data-page]').forEach(function (button) {
+      button.classList.toggle('active', button.dataset.page === id);
+    });
+    document.querySelectorAll('[data-debug-page]').forEach(function (target) {
+      target.classList.toggle('active', target.dataset.debugPage === id);
+    });
+    window.RPStorage.savePreferences({ activeDebugPage: id });
+  }
+
+  window.RPDebugConsole = {
+    renderAll: renderAll,
+    activate: activate
+  };
+})();

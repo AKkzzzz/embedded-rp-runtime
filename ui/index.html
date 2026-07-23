@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>内嵌 RP 运行时模板</title>
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/debug-console.css">
+</head>
+<body>
+  <main class="runtime-shell" id="runtimeShell" data-mode="debug">
+    <header class="runtime-topbar">
+      <div>
+        <p class="eyebrow">EMBEDDED RP RUNTIME / DEBUG</p>
+        <h1>卡内后台小酒馆</h1>
+      </div>
+      <div class="runtime-actions">
+        <span class="host-chip" id="hostChip">检测宿主中</span>
+        <button type="button" class="secondary" id="exportButton">导出诊断</button>
+        <button type="button" class="primary" id="startButton">开始游戏</button>
+      </div>
+    </header>
+
+    <section class="runtime-layout">
+      <nav class="debug-nav" aria-label="Debug 页面">
+        <button data-page="overview" class="active">总览</button>
+        <button data-page="models">模型</button>
+        <button data-page="worldbook">世界书</button>
+        <button data-page="state">变量</button>
+        <button data-page="presets">预设</button>
+        <button data-page="plugins">插件</button>
+        <button data-page="memory">记忆</button>
+        <button data-page="diagnostics">诊断</button>
+      </nav>
+
+      <section class="debug-workspace">
+        <div class="debug-page active" data-debug-page="overview"></div>
+        <div class="debug-page" data-debug-page="models"></div>
+        <div class="debug-page" data-debug-page="worldbook"></div>
+        <div class="debug-page" data-debug-page="state"></div>
+        <div class="debug-page" data-debug-page="presets"></div>
+        <div class="debug-page" data-debug-page="plugins"></div>
+        <div class="debug-page" data-debug-page="memory"></div>
+        <div class="debug-page" data-debug-page="diagnostics"></div>
+      </section>
+    </section>
+
+    <section class="game-surface" id="gameSurface" hidden>
+      <div class="empty-renderer">
+        <p class="eyebrow">RENDERER SLOT</p>
+        <h2>底层已启动，尚未安装应用表现层</h2>
+        <p>这里将由 Galgame、电子书或战棋 renderer 接管。Debug 后台仍在同一运行时中。</p>
+        <button type="button" class="secondary" id="backToDebug">返回后台</button>
+      </div>
+    </section>
+  </main>
+
+  <template id="cardTemplate">
+    <article class="debug-card"></article>
+  </template>
+
+  <script src="data/template-data.js"></script>
+  <script src="runtime/event-bus.js"></script>
+  <script src="runtime/storage-engine.js"></script>
+  <script src="runtime/state-guard.js"></script>
+  <script src="runtime/host-bridge.js"></script>
+  <script src="runtime/model-gateway.js"></script>
+  <script src="runtime/worldbook-patch-store.js"></script>
+  <script src="runtime/worldbook-engine.js"></script>
+  <script src="runtime/memory-engine.js"></script>
+  <script src="runtime/plugin-runtime.js"></script>
+  <script src="runtime/prompt-compiler.js"></script>
+  <script src="runtime/diagnostics.js"></script>
+  <script src="scripts/debug-console.js"></script>
+  <script src="scripts/bootstrap.js"></script>
+</body>
+</html>

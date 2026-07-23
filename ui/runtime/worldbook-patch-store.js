@@ -1,0 +1,136 @@
+(function () {
+  'use strict';
+
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function canonical() {
+    return window.RPStorage.getCanonical();
+  }
+
+  function authoredById(id) {
+    return window.RPTemplateData.worldbook.find(function (entry) { return entry.id === id; }) || null;
+  }
+
+  function localById(state, id) {
+    return (state.knowledge.entries || []).find(function (entry) { return entry.id === id; }) || null;
+  }
+
+  function validateEntry(entry) {
+    var errors = [];
+    if (!entry || typeof entry !== 'object') return ['entry must be an object'];
+    if (!/^[a-z0-9][a-z0-9._-]{2,119}$/i.test(entry.id || '')) errors.push('entry.id is invalid');
+    if (!String(entry.name || '').trim()) errors.push('entry.name is required');
+    if (!String(entry.content || '').trim()) errors.push('entry.content is required');
+    if (String(entry.content || '').length > 30000) errors.push('entry.content exceeds 30000 characters');
+    if (['user', 'memory-derived', 'imported'].indexOf(entry.source) === -1) errors.push('entry.source is invalid');
+    var trigger = entry.trigger || {};
+    if (['constant', 'literal', 'regex', 'state', 'semantic'].indexOf(trigger.type) === -1) errors.push('entry.trigger.type is invalid');
+    if (trigger.type === 'literal' && !(trigger.keys || []).length) errors.push('literal trigger needs keys');
+    if (trigger.type === 'regex' && !(trigger.patterns || []).length) errors.push('regex trigger needs patterns');
+    return errors;
+  }
+
+  function validateProposal(proposal) {
+    var state = canonical();
+    var errors = [];
+    if (!proposal || typeof proposal !== 'object') return { ok: false, errors: ['proposal must be an object'] };
+    if (Number(proposal.baseRevision) !== Number(state.knowledge.revision)) errors.push('baseRevision conflict');
+    if (!String(proposal.reason || '').trim()) errors.push('reason is required');
+    if (!Array.isArray(proposal.evidenceMessageIds) || !proposal.evidenceMessageIds.length) errors.push('evidenceMessageIds are required');
+    if (!Array.isArray(proposal.operations) || !proposal.operations.length) errors.push('operations are required');
+    (proposal.operations || []).forEach(function (operation, index) {
+      if (!operation || ['add', 'replace', 'disable'].indexOf(operation.op) === -1) {
+        errors.push('operations[' + index + '].op is invalid');
+        return;
+      }
+      if (operation.op === 'add') {
+        validateEntry(operation.entry).forEach(function (error) { errors.push('operations[' + index + ']: ' + error); });
+        if (operation.entry && operation.entry.source !== 'memory-derived') errors.push('model add may only create memory-derived entries');
+        if (operation.entry && (authoredById(operation.entry.id) || localById(state, operation.entry.id))) errors.push('entry id already exists: ' + operation.entry.id);
+      } else {
+        var targetId = String(operation.id || '');
+        var authored = authoredById(targetId);
+        var local = localById(state, targetId);
+        if (!authored && !local) errors.push('target entry missing: ' + targetId);
+        if (authored && authored.locked) errors.push('target entry is author-locked: ' + targetId);
+        if (local && local.locked) errors.push('target entry is locked: ' + targetId);
+        if (operation.op === 'replace') {
+          validateEntry(operation.entry).forEach(function (error) { errors.push('operations[' + index + ']: ' + error); });
+          if (operation.entry && operation.entry.id !== targetId) errors.push('replace cannot change entry id');
+        }
+      }
+    });
+    return { ok: errors.length === 0, errors: errors };
+  }
+
+  function propose(proposal) {
+    var validation = validateProposal(proposal);
+    if (!validation.ok) return validation;
+    var state = canonical();
+    var normalized = clone(proposal);
+    normalized.id = normalized.id || 'wb-proposal-' + Date.now();
+    normalized.status = 'pending';
+    normalized.createdAt = new Date().toISOString();
+    state.knowledge.pendingProposals = state.knowledge.pendingProposals.concat([normalized]);
+    var whole = window.RPStateGuard.validate(state, window.RPTemplateData.stateSchema);
+    if (!whole.ok) return whole;
+    window.RPStorage.saveCanonical(state);
+    window.RPEvents.emit('worldbook:proposal:created', clone(normalized));
+    return { ok: true, proposal: normalized };
+  }
+
+  function commit(id) {
+    var state = canonical();
+    var proposal = state.knowledge.pendingProposals.find(function (item) { return item.id === id; });
+    if (!proposal || proposal.status !== 'pending') return { ok: false, errors: ['pending proposal not found'] };
+    var validation = validateProposal(proposal);
+    if (!validation.ok) return validation;
+    var entries = state.knowledge.entries.slice();
+    proposal.operations.forEach(function (operation) {
+      if (operation.op === 'add') {
+        entries.push(Object.assign({
+          enabled: true,
+          locked: false,
+          order: 100,
+          placement: 'before_character',
+          dependencies: []
+        }, clone(operation.entry)));
+      } else {
+        var index = entries.findIndex(function (entry) { return entry.id === operation.id; });
+        if (operation.op === 'replace' && index >= 0) entries[index] = clone(operation.entry);
+        if (operation.op === 'disable' && index >= 0) entries[index].enabled = false;
+      }
+    });
+    state.knowledge.entries = entries;
+    state.knowledge.revision += 1;
+    proposal.status = 'accepted';
+    proposal.acceptedAt = new Date().toISOString();
+    var whole = window.RPStateGuard.validate(state, window.RPTemplateData.stateSchema);
+    if (!whole.ok) return whole;
+    window.RPStorage.saveCanonical(state);
+    window.RPEvents.emit('worldbook:proposal:committed', { id: id, revision: state.knowledge.revision });
+    return { ok: true, revision: state.knowledge.revision };
+  }
+
+  function reject(id) {
+    var state = canonical();
+    var proposal = state.knowledge.pendingProposals.find(function (item) { return item.id === id; });
+    if (!proposal || proposal.status !== 'pending') return false;
+    proposal.status = 'rejected';
+    proposal.rejectedAt = new Date().toISOString();
+    window.RPStorage.saveCanonical(state);
+    window.RPEvents.emit('worldbook:proposal:rejected', { id: id });
+    return true;
+  }
+
+  window.RPWorldbookPatches = {
+    entries: function () { return clone(canonical().knowledge.entries || []); },
+    proposals: function () { return clone(canonical().knowledge.pendingProposals || []); },
+    validateProposal: validateProposal,
+    propose: propose,
+    commit: commit,
+    reject: reject
+  };
+})();
