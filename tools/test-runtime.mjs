@@ -53,11 +53,16 @@ vm.createContext(sandbox);
 
 for (const relative of [
   'ui/data/template-data.js',
+  'ui/data/rphub-presets.js',
   'ui/runtime/event-bus.js',
   'ui/runtime/storage-engine.js',
+  'ui/runtime/preset-store.js',
   'ui/runtime/state-guard.js',
   'ui/runtime/worldbook-patch-store.js',
-  'ui/runtime/worldbook-engine.js'
+  'ui/runtime/worldbook-engine.js',
+  'ui/runtime/memory-engine.js',
+  'ui/runtime/plugin-runtime.js',
+  'ui/runtime/prompt-compiler.js'
 ]) {
   vm.runInContext(fs.readFileSync(path.join(root, relative), 'utf8'), sandbox, { filename: relative });
 }
@@ -67,6 +72,22 @@ const stateValidation = sandbox.RPStateGuard.validate(
   sandbox.RPTemplateData.stateSchema
 );
 assert.equal(stateValidation.ok, true);
+assert.equal(sandbox.RPPresets.list().length, 15);
+assert.equal(sandbox.RPPresets.byId('rphub-second-person').runtimeEnabled, true);
+assert.equal(sandbox.RPPresets.setEnabled('rphub-third-person', true), true);
+assert.equal(sandbox.RPPresets.byId('rphub-third-person').runtimeEnabled, true);
+assert.equal(sandbox.RPPresets.byId('rphub-second-person').runtimeEnabled, false);
+sandbox.RPPresets.reset();
+
+const compiledPrompt = await sandbox.RPPrompt.compile('检查世界书递归扫描');
+assert.equal(JSON.stringify(compiledPrompt.messages.slice(0, 6).map(message => message.source)), JSON.stringify([
+  'preset:runtime-law',
+  'preset:runtime-response-envelope',
+  'preset:rphub-roleplay-default',
+  'worldbook:runtime-contract',
+  'worldbook:example-regex-trigger',
+  'presets:system-support'
+]));
 
 const retrieval = sandbox.RPWorldbook.retrieve('请检查世界书递归扫描');
 assert.deepEqual(retrieval.hits.map(hit => hit.id), ['runtime-contract', 'example-regex-trigger']);
@@ -130,6 +151,9 @@ assert(lockedEdit.errors.some(error => error.includes('author-locked')));
 console.log(JSON.stringify({
   ok: true,
   initialStateValid: true,
+  presets: 15,
+  exclusivePerspective: true,
+  promptOrder: compiledPrompt.messages.slice(0, 6).map(message => message.source),
   retrievalHits: retrieval.hits.map(hit => hit.id),
   committedRevision: committed.revision,
   lockedEditRejected: true

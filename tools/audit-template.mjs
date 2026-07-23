@@ -65,8 +65,10 @@ for (const forbidden of [
 
 const runtimeFiles = [
   'ui/data/template-data.js',
+  'ui/data/rphub-presets.js',
   'ui/runtime/event-bus.js',
   'ui/runtime/storage-engine.js',
+  'ui/runtime/preset-store.js',
   'ui/runtime/state-guard.js',
   'ui/runtime/host-bridge.js',
   'ui/runtime/model-gateway.js',
@@ -85,9 +87,11 @@ for (const relative of runtimeFiles) {
 }
 
 const dataSource = fs.readFileSync(path.join(root, 'ui/data/template-data.js'), 'utf8');
+const presetSource = fs.readFileSync(path.join(root, 'ui/data/rphub-presets.js'), 'utf8');
 const sandbox = { window: {} };
 vm.createContext(sandbox);
 vm.runInContext(dataSource, sandbox);
+vm.runInContext(presetSource, sandbox);
 const templateData = sandbox.window.RPTemplateData;
 const ids = new Set();
 for (const entry of templateData.worldbook) {
@@ -107,11 +111,27 @@ for (const plugin of templateData.plugins) {
   if (!Number.isFinite(plugin.priority)) throw new Error(`invalid plugin priority: ${plugin.id}`);
 }
 
+const presetIds = new Set();
+for (const preset of templateData.presets) {
+  if (!preset.id || presetIds.has(preset.id)) throw new Error(`invalid or duplicate preset id: ${preset.id}`);
+  presetIds.add(preset.id);
+  if (!['system', 'user', 'assistant'].includes(preset.role)) throw new Error(`invalid preset role: ${preset.id}`);
+  if (!['system-root', 'system-support', 'prelude'].includes(preset.phase)) throw new Error(`invalid preset phase: ${preset.id}`);
+  if (!Number.isFinite(preset.order)) throw new Error(`invalid preset order: ${preset.id}`);
+  if (!String(preset.content || '').trim()) throw new Error(`empty preset content: ${preset.id}`);
+}
+for (const forbiddenPreset of ['色情内容增强', 'COT']) {
+  if (templateData.presets.some(preset => preset.name === forbiddenPreset)) {
+    throw new Error(`forbidden default preset was bundled: ${forbiddenPreset}`);
+  }
+}
+
 console.log(JSON.stringify({
   ok: true,
   target: path.relative(root, target),
   worldbookEntries: templateData.worldbook.length,
   plugins: templateData.plugins.length,
+  presets: templateData.presets.length,
   modelRoutes: Object.keys(templateData.modelRoutes),
   compressedBytes: Buffer.from(encoded, 'base64').length
 }, null, 2));

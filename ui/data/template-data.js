@@ -14,24 +14,7 @@
       summarize: { label: '记忆摘要', inherit: 'balanced', model: '', temperature: 0.3 },
       embedding: { label: '向量嵌入', inherit: 'embedding', model: '', dimensions: null }
     },
-    presets: [
-      {
-        id: 'runtime-law',
-        name: '运行时总则',
-        role: 'system',
-        order: 1000,
-        enabled: true,
-        content: '遵守当前应用的数据契约；叙事结果与结构化补丁必须一致。'
-      },
-      {
-        id: 'response-envelope',
-        name: '响应信封',
-        role: 'system',
-        order: 900,
-        enabled: true,
-        content: '按当前 renderer 声明的响应格式返回，不输出未声明的可执行代码。'
-      }
-    ],
+    presets: [],
     worldbook: [
       {
         id: 'runtime-contract',

@@ -236,6 +236,47 @@ button.secondary {
   align-items: start;
 }
 
+.preset-row-head,
+.preset-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.preset-row-head {
+  justify-content: space-between;
+}
+
+.preset-actions button {
+  min-height: 30px;
+  padding: 0 9px;
+  color: var(--muted);
+}
+
+.preset-actions button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+details {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid rgba(74, 119, 117, 0.32);
+  border-radius: 7px;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+details pre {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(74, 119, 117, 0.3);
+}
+
 .data-row code,
 pre {
   font: 11px/1.55 var(--mono);
@@ -399,6 +440,11 @@ textarea:focus {
   .status-row,
   .data-row {
     grid-template-columns: 1fr auto;
+  }
+
+  .preset-row-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .status-row > :nth-child(2),

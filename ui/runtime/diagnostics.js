@@ -20,6 +20,7 @@
         available: window.RPModels.models(),
         calls: window.RPModels.diagnostics()
       },
+      presets: window.RPPresets.list(),
       plugins: window.RPPlugins.list(),
       memory: window.RPMemory.stats(),
       events: window.RPEvents.inspect(),

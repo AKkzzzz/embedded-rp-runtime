@@ -139,14 +139,42 @@
 
   function renderPresets() {
     var target = page('presets');
-    var rows = window.RPTemplateData.presets.map(function (preset) {
-      return '<div class="data-row stack"><div><strong>' + escapeHtml(preset.name) + '</strong> ' +
-        badge(preset.role + ' · ' + preset.order) + '</div><p class="muted">' + escapeHtml(preset.content) + '</p></div>';
+    var presets = window.RPPresets.list();
+    var rows = presets.map(function (preset) {
+      var source = preset.source || {};
+      return '<div class="data-row stack"><div class="preset-row-head"><div><strong>' + escapeHtml(preset.name) + '</strong> ' +
+        badge(preset.role + ' · ' + preset.phase) + ' ' +
+        badge(preset.runtimeEnabled ? '启用' : '关闭', preset.runtimeEnabled ? 'ok' : 'warn') +
+        '</div><div class="preset-actions">' +
+        '<button type="button" data-preset-move="' + escapeHtml(preset.id) + '" data-direction="-1" aria-label="上移 ' + escapeHtml(preset.name) + '">↑</button>' +
+        '<button type="button" data-preset-move="' + escapeHtml(preset.id) + '" data-direction="1" aria-label="下移 ' + escapeHtml(preset.name) + '">↓</button>' +
+        '<button type="button" data-preset-toggle="' + escapeHtml(preset.id) + '"' + (preset.locked ? ' disabled' : '') + '>' +
+        (preset.locked ? '内核锁定' : (preset.runtimeEnabled ? '关闭' : '启用')) + '</button></div></div>' +
+        '<div class="tiny">顺位 ' + preset.runtimeIndex + ' · 来源 ' + escapeHtml(source.project || 'unknown') + ' · ' + escapeHtml(source.license || '') + '</div>' +
+        '<details><summary>查看注入内容 · ' + String(preset.content || '').length + ' 字符</summary><pre>' + escapeHtml(preset.content) + '</pre></details></div>';
     }).join('');
     target.innerHTML = pageHead(
       '提示词预设',
-      '预设是 Prompt Compiler 的有序输入。应用包可以新增题材规则，但不能绕过状态与输出契约。'
+      '支持 system、user、assistant 三种角色与分阶段注入。RP-Hub 通用预设已迁入；内核契约不可关闭，视角预设互斥。',
+      '<button type="button" class="secondary" id="resetPresets">恢复默认</button>'
     ) + '<div class="debug-card"><div class="row-list">' + rows + '</div></div>';
+    target.querySelector('#resetPresets').onclick = function () {
+      window.RPPresets.reset();
+      renderPresets();
+    };
+    target.querySelectorAll('[data-preset-toggle]').forEach(function (button) {
+      button.onclick = function () {
+        var preset = window.RPPresets.byId(button.dataset.presetToggle);
+        window.RPPresets.setEnabled(preset.id, !preset.runtimeEnabled);
+        renderPresets();
+      };
+    });
+    target.querySelectorAll('[data-preset-move]').forEach(function (button) {
+      button.onclick = function () {
+        window.RPPresets.move(button.dataset.presetMove, Number(button.dataset.direction));
+        renderPresets();
+      };
+    });
   }
 
   function renderPlugins() {

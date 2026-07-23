@@ -13,15 +13,25 @@
     var started = performance.now();
     var retrieval = window.RPWorldbook.retrieve(input, Object.assign({}, options.worldbook, { state: options.state }));
     var memories = window.RPMemory.searchStructured(input, { topK: options.memoryTopK });
-    var presets = window.RPTemplateData.presets
-      .filter(function (preset) { return preset.enabled !== false; })
-      .sort(function (a, b) { return Number(b.order || 0) - Number(a.order || 0); });
+    var presetGroups = window.RPPresets.compile();
     var messages = [];
-    presets.forEach(function (preset) {
+    presetGroups.systemRoot.forEach(function (preset) {
       messages.push({ role: preset.role, content: preset.content, source: 'preset:' + preset.id });
     });
     retrieval.hits.forEach(function (hit) {
       messages.push({ role: 'system', content: '【' + hit.name + '】\n' + hit.content, source: 'worldbook:' + hit.id });
+    });
+    if (presetGroups.systemSupport.length) {
+      messages.push({
+        role: 'system',
+        content: '[System Presets]\n' + presetGroups.systemSupport.map(function (preset) {
+          return '【' + preset.name + '】\n' + preset.content;
+        }).join('\n\n---\n\n'),
+        source: 'presets:system-support'
+      });
+    }
+    presetGroups.prelude.forEach(function (preset) {
+      messages.push({ role: preset.role, content: preset.content, source: 'preset:' + preset.id });
     });
     if (memories.length) {
       messages.push({

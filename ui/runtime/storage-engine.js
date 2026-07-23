@@ -39,6 +39,8 @@
     activeDebugPage: 'overview',
     worldbookDisabled: [],
     pluginEnabled: {},
+    presetEnabled: {},
+    presetOrder: [],
     modelRoutes: {},
     reducedMotion: false
   });
