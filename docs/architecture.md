@@ -45,7 +45,7 @@
 - `capabilities`
 - `models.list`
 - `generation.create`
-- `embeddings.create`（尚未实现）
+- `embeddings.create`（继承 RP-Hub embedding 配置，失败进入卡内重试队列）
 - `intent.submit`
 - `records.read`
 
