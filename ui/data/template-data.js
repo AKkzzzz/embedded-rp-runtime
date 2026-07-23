@@ -58,8 +58,16 @@
         name: '随机骰子',
         type: 'dice',
         callName: 'tool_dice',
-        enabled: true,
+        enabled: false,
         resultCount: 1
+      },
+      {
+        id: 'tool_worldbook',
+        name: '主动世界书查询',
+        type: 'worldbook',
+        callName: 'tool_worldbook',
+        enabled: false,
+        resultCount: 6
       }
     ],
     presets: [],
@@ -345,6 +353,46 @@
         priority: 140,
         enabled: false,
         capabilities: ['audio:play', 'visual:effect', 'assets:read', 'ui:overlay']
+      },
+      {
+        id: 'runtime.prompt-inspector', name: 'Prompt Inspector', version: '0.1.0', priority: 150, enabled: false,
+        capabilities: ['prompt:inspect', 'conversation:read', 'worldbook:read', 'memory:read', 'state:read', 'ui:overlay']
+      },
+      {
+        id: 'runtime.guided-generations', name: 'Guided Generations', version: '0.1.0', priority: 160, enabled: false,
+        capabilities: ['suggestions:generate', 'prompt:modify', 'state:read', 'ui:overlay']
+      },
+      {
+        id: 'runtime.character-memory', name: 'CharMemory', version: '0.1.0', priority: 170, enabled: false,
+        capabilities: ['memory:read', 'memory:write', 'memory:curate', 'conversation:read', 'ui:overlay']
+      },
+      {
+        id: 'runtime.notebook', name: 'Notebook', version: '0.1.0', priority: 180, enabled: false,
+        capabilities: ['notes:write', 'prompt:modify', 'storage:local', 'ui:overlay']
+      },
+      {
+        id: 'runtime.persona-switcher', name: 'Quick Persona', version: '0.1.0', priority: 190, enabled: false,
+        capabilities: ['persona:switch', 'state:patch:propose', 'storage:local', 'ui:overlay']
+      },
+      {
+        id: 'runtime.visual-novel', name: 'Visual Novel Focus', version: '0.1.0', priority: 200, enabled: false,
+        capabilities: ['visual:effect', 'ui:overlay', 'assets:read']
+      },
+      {
+        id: 'runtime.diagram', name: 'Lightweight Diagrams', version: '0.1.0', priority: 210, enabled: false,
+        capabilities: ['diagrams:render', 'ui:overlay']
+      },
+      {
+        id: 'runtime.parameter-randomizer', name: 'Parameter Randomizer', version: '0.1.0', priority: 220, enabled: false,
+        capabilities: ['parameters:modify', 'storage:local']
+      },
+      {
+        id: 'runtime.lore-copilot', name: 'Lore Copilot', version: '0.1.0', priority: 230, enabled: false,
+        capabilities: ['worldbook:read', 'worldbook:patch:propose', 'conversation:read', 'prompt:inspect', 'ui:overlay']
+      },
+      {
+        id: 'runtime.lore-recommender', name: 'Lore Recommender', version: '0.1.0', priority: 240, enabled: false,
+        capabilities: ['worldbook:read', 'lore:diagnose', 'prompt:inspect', 'ui:overlay']
       }
     ],
     memory: {

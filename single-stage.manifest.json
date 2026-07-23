@@ -65,8 +65,14 @@
     {
       "id": "tool_dice",
       "type": "dice",
-      "enabled": true,
+      "enabled": false,
       "capabilities": ["randomness:local"]
+    },
+    {
+      "id": "tool_worldbook",
+      "type": "worldbook",
+      "enabled": false,
+      "capabilities": ["worldbook:read"]
     }
   ],
   "plugins": [
@@ -156,6 +162,56 @@
       "requires": [],
       "optional": [],
       "capabilities": ["audio:play", "visual:effect", "assets:read", "ui:overlay"]
+    },
+    {
+      "id": "runtime.prompt-inspector", "version": "0.1.0", "enabled": false, "priority": 150,
+      "requires": [], "optional": [],
+      "capabilities": ["prompt:inspect", "conversation:read", "worldbook:read", "memory:read", "state:read", "ui:overlay"]
+    },
+    {
+      "id": "runtime.guided-generations", "version": "0.1.0", "enabled": false, "priority": 160,
+      "requires": [], "optional": [],
+      "capabilities": ["suggestions:generate", "prompt:modify", "state:read", "ui:overlay"]
+    },
+    {
+      "id": "runtime.character-memory", "version": "0.1.0", "enabled": false, "priority": 170,
+      "requires": [], "optional": [],
+      "capabilities": ["memory:read", "memory:write", "memory:curate", "conversation:read", "ui:overlay"]
+    },
+    {
+      "id": "runtime.notebook", "version": "0.1.0", "enabled": false, "priority": 180,
+      "requires": [], "optional": [],
+      "capabilities": ["notes:write", "prompt:modify", "storage:local", "ui:overlay"]
+    },
+    {
+      "id": "runtime.persona-switcher", "version": "0.1.0", "enabled": false, "priority": 190,
+      "requires": [], "optional": [],
+      "capabilities": ["persona:switch", "state:patch:propose", "storage:local", "ui:overlay"]
+    },
+    {
+      "id": "runtime.visual-novel", "version": "0.1.0", "enabled": false, "priority": 200,
+      "requires": [], "optional": [],
+      "capabilities": ["visual:effect", "ui:overlay", "assets:read"]
+    },
+    {
+      "id": "runtime.diagram", "version": "0.1.0", "enabled": false, "priority": 210,
+      "requires": [], "optional": [],
+      "capabilities": ["diagrams:render", "ui:overlay"]
+    },
+    {
+      "id": "runtime.parameter-randomizer", "version": "0.1.0", "enabled": false, "priority": 220,
+      "requires": [], "optional": [],
+      "capabilities": ["parameters:modify", "storage:local"]
+    },
+    {
+      "id": "runtime.lore-copilot", "version": "0.1.0", "enabled": false, "priority": 230,
+      "requires": [], "optional": [],
+      "capabilities": ["worldbook:read", "worldbook:patch:propose", "conversation:read", "prompt:inspect", "ui:overlay"]
+    },
+    {
+      "id": "runtime.lore-recommender", "version": "0.1.0", "enabled": false, "priority": 240,
+      "requires": [], "optional": [],
+      "capabilities": ["worldbook:read", "lore:diagnose", "prompt:inspect", "ui:overlay"]
     }
   ],
   "stage": {

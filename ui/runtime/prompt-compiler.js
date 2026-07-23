@@ -60,6 +60,8 @@
       if (tool.type === 'vector_memory') return '<tool_memory_add:具体检索内容> 或 <tool_memory_cover:具体检索内容>：检索较早剧情、人物关系、物品和事件记忆。';
       if (tool.type === 'keyword_dialogue') return '<tool_grep_add:原文关键词> 或 <tool_grep_cover:原文关键词>：精准查找当前对话历史中的原文片段。';
       if (tool.type === 'web_search') return '<tool_web_add:搜索词或URL> 或 <tool_web_cover:搜索词或URL>：查询外部资料；只有宿主提供搜索能力时可用。';
+      if (tool.type === 'worldbook') return '<tool_worldbook_add:设定查询> 或 <tool_worldbook_cover:设定查询>：主动检索卡内世界书、规则与角色资料。';
+      if (tool.type === 'dice') return '<tool_dice:骰式>：执行公开随机检定，例如 d20、2d6+3。';
       return '<' + tool.callName + ':查询内容>';
     });
     return '[Active Tools]\n上下文不足时，可在正式正文前单独输出工具标签。每行一个，单轮最多5个；收到 <active_tool_results> 后继续正文，不要复述标签。\n' + lines.join('\n');

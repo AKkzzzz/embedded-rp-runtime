@@ -27,7 +27,16 @@
     'audio:play',
     'visual:effect',
     'webllm:local',
-    'assets:read'
+    'assets:read',
+    'conversation:read',
+    'memory:curate',
+    'notes:write',
+    'persona:switch',
+    'prompt:inspect',
+    'suggestions:generate',
+    'diagrams:render',
+    'parameters:modify',
+    'lore:diagnose'
   ]);
 
   function preference(id, fallback) {

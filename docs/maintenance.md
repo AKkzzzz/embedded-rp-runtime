@@ -97,6 +97,16 @@ RPPlugins.setEnabled('my-plugin', false);
 | `runtime.dynamic-lore` | 动态 Lore 接口 |
 | `runtime.webllm` | 本地模型适配 |
 | `runtime.media-stage` | 音频、视觉事件、Live2D 探测 |
+| `runtime.prompt-inspector` | 最终 Prompt 与注入来源检查 |
+| `runtime.guided-generations` | AI 行动建议 |
+| `runtime.character-memory` | 结构化人物记忆 |
+| `runtime.notebook` | 可选择注入的玩家便签 |
+| `runtime.persona-switcher` | 卡内 Persona 切换 |
+| `runtime.visual-novel` | 视觉小说表现模式 |
+| `runtime.diagram` | 轻量关系图与流程图 |
+| `runtime.parameter-randomizer` | 受限模型参数随机化 |
+| `runtime.lore-copilot` | 世界书补丁草稿 |
+| `runtime.lore-recommender` | 世界书命中与冲突诊断 |
 
 ### 卡面、浮层和媒体
 

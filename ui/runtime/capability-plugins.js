@@ -109,7 +109,23 @@
     function render() {
       var state = window.RPStorage.getCanonical();
       panel.innerHTML = '<strong>运行时浮层</strong><p style="opacity:.75">不占主舞台空间，按需打开。</p>' +
-        '<pre style="white-space:pre-wrap;word-break:break-word">' + escapeHtml(JSON.stringify({ player: state.player, scene: state.scene, rpg: state.rpg }, null, 2)) + '</pre>';
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">' +
+        (window.RPPlugins.isEnabled('runtime.prompt-inspector') ? '<button data-cap-view="prompt">本轮提示词</button>' : '') +
+        (window.RPPlugins.isEnabled('runtime.notebook') ? '<button data-cap-view="notes">便签</button>' : '') +
+        (window.RPPlugins.isEnabled('runtime.timeline') ? '<button data-cap-view="timeline">时间线</button>' : '') +
+        (window.RPPlugins.isEnabled('runtime.persona-switcher') ? '<button data-cap-view="persona">Persona</button>' : '') +
+        '</div><pre id="rpCapabilityOutput" style="white-space:pre-wrap;word-break:break-word">' +
+        escapeHtml(JSON.stringify({ player: state.player, scene: state.scene, rpg: state.rpg }, null, 2)) + '</pre>';
+      panel.querySelectorAll('[data-cap-view]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var value = {};
+          if (button.dataset.capView === 'prompt') value = window.RPPromptInspector.snapshot();
+          if (button.dataset.capView === 'notes') value = window.RPNotebook.list();
+          if (button.dataset.capView === 'timeline') value = window.RPTimeline.list();
+          if (button.dataset.capView === 'persona') value = window.RPPersonas.list();
+          panel.querySelector('#rpCapabilityOutput').textContent = JSON.stringify(value, null, 2);
+        });
+      });
     }
     function escapeHtml(value) { return String(value).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
     ball.addEventListener('click', function () { panel.hidden = !panel.hidden; if (!panel.hidden) render(); });

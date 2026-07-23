@@ -66,6 +66,21 @@
         ? '骰式 ' + result.expression + '：[' + result.rolls.join(', ') + '] ' + (result.modifier ? (result.modifier > 0 ? '+ ' : '- ') + Math.abs(result.modifier) + '，' : '') + '结果 = ' + result.total
         : result.error };
     }
+    if (tool.type === 'worldbook' && window.RPWorldbook) {
+      var retrieval = window.RPWorldbook.retrieve(call.query, {
+        history: window.RPConversation ? window.RPConversation.list() : [],
+        state: window.RPStorage.getCanonical()
+      });
+      var hits = retrieval.hits.slice(0, tool.resultCount || 6);
+      return {
+        call: call,
+        mode: /_cover$/i.test(call.name) ? 'cover' : 'add',
+        status: 'ok',
+        content: hits.length ? hits.map(function (hit) {
+          return '【' + hit.name + '】\n' + hit.content;
+        }).join('\n\n') : '没有找到匹配的世界书条目。'
+      };
+    }
     if (tool.type === 'keyword_dialogue') {
       var messages = window.RPConversation ? window.RPConversation.list() : [];
       var query = call.query.toLowerCase();

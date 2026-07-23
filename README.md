@@ -42,7 +42,7 @@ python3 -m http.server 8774
 http://127.0.0.1:8774/cards/内嵌RP运行时模板/ui/
 ```
 
-测试、构建、审计与 Git 收尾流程见 [docs/git-workflow.md](docs/git-workflow.md)，预设互通格式见 [docs/preset-interchange.md](docs/preset-interchange.md)。
+测试、构建、审计与 Git 收尾流程见 [docs/git-workflow.md](docs/git-workflow.md)，预设互通格式见 [docs/preset-interchange.md](docs/preset-interchange.md)，社区能力接入见 [docs/community-suite.md](docs/community-suite.md)，维护和单飞方案见 [docs/maintenance.md](docs/maintenance.md)。
 
 ## 安全边界
 

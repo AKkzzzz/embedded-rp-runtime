@@ -850,3 +850,14 @@ textarea:focus {
     animation: none !important;
   }
 }
+html.rp-visual-novel .conversation-stage {
+  background: linear-gradient(180deg, rgba(8, 14, 25, .22), rgba(8, 14, 25, .88));
+}
+
+html.rp-visual-novel .conversation-log {
+  scroll-behavior: auto;
+}
+
+html.rp-visual-novel .conversation-message {
+  max-width: min(82ch, 92%);
+}

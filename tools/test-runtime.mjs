@@ -60,9 +60,12 @@ for (const relative of [
   'ui/runtime/state-guard.js',
   'ui/runtime/regex-engine.js',
   'ui/runtime/plugin-runtime.js',
+  'ui/runtime/capability-plugins.js',
   'ui/runtime/worldbook-engine.js',
   'ui/runtime/worldbook-patch-store.js',
   'ui/runtime/memory-engine.js',
+  'ui/runtime/tool-engine.js',
+  'ui/runtime/community-plugins.js',
   'ui/runtime/prompt-compiler.js'
 ]) {
   vm.runInContext(fs.readFileSync(path.join(root, relative), 'utf8'), sandbox, { filename: relative });
@@ -308,6 +311,25 @@ assert.deepEqual(Object.keys(exportedWorldbook[0]), [
 assert.equal(exportedWorldbook[0].scope, 'global');
 assert.equal(exportedWorldbook[0].probability, 75);
 
+sandbox.RPTools.setEnabled('tool_dice', true);
+const diceTool = await sandbox.RPTools.run('<tool_dice:2d6+3>');
+assert.equal(diceTool.calls.length, 1);
+assert.equal(diceTool.calls[0].status, 'ok');
+assert.match(diceTool.calls[0].content, /结果 = \d+/);
+sandbox.RPTools.setEnabled('tool_worldbook', true);
+const worldbookTool = await sandbox.RPTools.run('<tool_worldbook:测试长期事实>');
+assert.equal(worldbookTool.calls.length, 1);
+assert.equal(worldbookTool.calls[0].status, 'ok');
+assert.match(worldbookTool.calls[0].content, /测试长期事实/);
+assert.equal(typeof sandbox.RPPromptInspector.snapshot, 'function');
+assert.equal(typeof sandbox.RPGuided.suggest, 'function');
+assert.equal(typeof sandbox.RPCharMemory.add, 'function');
+assert.equal(typeof sandbox.RPNotebook.add, 'function');
+assert.equal(typeof sandbox.RPPersonas.activate, 'function');
+assert.equal(typeof sandbox.RPDiagrams.render, 'function');
+assert.equal(typeof sandbox.RPLoreCopilot.draft, 'function');
+assert.equal(typeof sandbox.RPLoreRecommender.inspect, 'function');
+
 const pluginStates = sandbox.RPPlugins.list();
 assert(pluginStates.every(plugin => plugin.status === 'ready'));
 assert(pluginStates.find(plugin => plugin.id === 'runtime.worldbook.recursion').calls > 0);
@@ -325,4 +347,5 @@ console.log(JSON.stringify({
   realPluginImplementations: true,
   committedRevision: committed.revision,
   lockedEditRejected: true
+  ,communitySuite: true
 }, null, 2));
