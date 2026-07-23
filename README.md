@@ -6,7 +6,8 @@
 
 - 默认进入后台控制台，不直接开始故事；
 - 可以检查宿主能力、模型路由、世界书、触发规则、变量、预设、插件、记忆和诊断；
-- 内置经过筛选和署名的 RP-Hub 通用预设，支持角色、阶段、启停、排序和互斥组；
+- 内置经过筛选和署名的 RP-Hub 通用预设，支持搜索、翻阅、编辑、复制、角色、阶段、启停、排序和互斥组；
+- 预设可按 RP-Hub 的直接数组 JSON 格式双向导入导出；
 - “开始游戏”只切换表现层，不改变底层状态；
 - 不读取 RP-Hub 的 API Key，不加载远程 JavaScript；
 - 宿主不支持增强桥时，保留 `/send` 兼容路径并明确标记降级能力。
@@ -34,6 +35,8 @@ python3 -m http.server 8774
 ```text
 http://127.0.0.1:8774/cards/内嵌RP运行时模板/ui/
 ```
+
+测试、构建、审计与 Git 收尾流程见 [docs/git-workflow.md](docs/git-workflow.md)，预设互通格式见 [docs/preset-interchange.md](docs/preset-interchange.md)。
 
 ## 安全边界
 

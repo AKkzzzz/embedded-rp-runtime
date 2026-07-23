@@ -79,6 +79,41 @@ assert.equal(sandbox.RPPresets.byId('rphub-third-person').runtimeEnabled, true);
 assert.equal(sandbox.RPPresets.byId('rphub-second-person').runtimeEnabled, false);
 sandbox.RPPresets.reset();
 
+const importedPresets = sandbox.RPPresets.importRpHub([
+  {
+    name: '用户的 RP-Hub 系统预设',
+    content: '保持场景连续。',
+    enabled: true,
+    role: 'system'
+  },
+  {
+    name: '用户的 RP-Hub AI 预注入',
+    content: '准备继续故事。',
+    enabled: false,
+    role: 'assistant'
+  }
+]);
+assert.equal(importedPresets.ok, true);
+assert.equal(importedPresets.imported.length, 2);
+assert.equal(sandbox.RPPresets.list().length, 17);
+assert.equal(importedPresets.imported[0].phase, 'system-support');
+assert.equal(importedPresets.imported[1].phase, 'prelude');
+const exportedPresets = sandbox.RPPresets.exportRpHub(importedPresets.imported.map(preset => preset.id));
+assert.equal(exportedPresets.length, 2);
+assert.equal(JSON.stringify(Object.keys(exportedPresets[0])), JSON.stringify(['name', 'content', 'enabled', 'role']));
+assert.equal(exportedPresets.find(preset => preset.role === 'assistant').enabled, false);
+const editedPreset = sandbox.RPPresets.update(importedPresets.imported[0].id, {
+  name: '已编辑系统预设',
+  content: '保持场景连续，并服从状态契约。',
+  role: 'system',
+  phase: 'system-support',
+  enabled: true,
+  order: 640
+});
+assert.equal(editedPreset.ok, true);
+assert.equal(sandbox.RPPresets.byId(importedPresets.imported[0].id).name, '已编辑系统预设');
+sandbox.RPPresets.reset();
+
 const compiledPrompt = await sandbox.RPPrompt.compile('检查世界书递归扫描');
 assert.equal(JSON.stringify(compiledPrompt.messages.slice(0, 6).map(message => message.source)), JSON.stringify([
   'preset:runtime-law',
@@ -152,6 +187,7 @@ console.log(JSON.stringify({
   ok: true,
   initialStateValid: true,
   presets: 15,
+  presetImportExport: true,
   exclusivePerspective: true,
   promptOrder: compiledPrompt.messages.slice(0, 6).map(message => message.source),
   retrievalHits: retrieval.hits.map(hit => hit.id),

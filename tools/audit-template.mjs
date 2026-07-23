@@ -45,7 +45,8 @@ for (const needle of [
   'window.RPMemory',
   'window.RPPlugins',
   'window.RPPrompt',
-  'window.RPDiagnostics'
+  'window.RPDiagnostics',
+  'window.RPPresetManager'
 ]) {
   if (!inner.includes(needle)) throw new Error(`inner runtime missing ${needle}`);
 }
@@ -78,6 +79,7 @@ const runtimeFiles = [
   'ui/runtime/plugin-runtime.js',
   'ui/runtime/prompt-compiler.js',
   'ui/runtime/diagnostics.js',
+  'ui/scripts/preset-manager.js',
   'ui/scripts/debug-console.js',
   'ui/scripts/bootstrap.js'
 ];

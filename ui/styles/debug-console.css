@@ -258,6 +258,226 @@ button.secondary {
   opacity: 0.55;
 }
 
+.preset-toolbar {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto auto repeat(6, auto);
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.preset-toolbar input,
+.preset-toolbar select,
+.field input,
+.field select,
+.field textarea {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  background: #071416;
+}
+
+.preset-toolbar input:focus,
+.preset-toolbar select:focus,
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--cyan);
+}
+
+.preset-notice {
+  margin-bottom: 10px;
+  padding: 9px 11px;
+  color: var(--green);
+  border: 1px solid rgba(121, 200, 144, 0.4);
+  border-radius: 8px;
+  background: rgba(121, 200, 144, 0.08);
+  font-size: 12px;
+}
+
+.preset-manager {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.36fr) minmax(0, 1fr);
+  min-height: 510px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(6, 18, 20, 0.58);
+}
+
+.preset-browser {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  background: rgba(8, 22, 24, 0.78);
+}
+
+.preset-browser > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.preset-list {
+  display: grid;
+  gap: 5px;
+  max-height: 570px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.preset-list-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 9px 10px;
+  text-align: left;
+  background: rgba(4, 14, 16, 0.72);
+}
+
+.preset-list-item.active {
+  border-color: var(--cyan);
+  background: linear-gradient(90deg, rgba(116, 212, 192, 0.14), rgba(116, 212, 192, 0.03));
+  box-shadow: inset 3px 0 var(--cyan);
+}
+
+.preset-list-main,
+.preset-list-side {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.preset-list-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-list-main small,
+.preset-list-side small,
+.preset-list-side em {
+  color: var(--faint);
+  font: normal 10px/1.2 var(--mono);
+}
+
+.preset-list-side {
+  flex: 0 0 auto;
+  justify-items: end;
+}
+
+.preset-list-side em.is-on {
+  color: var(--green);
+}
+
+.preset-editor {
+  min-width: 0;
+  padding: 14px;
+}
+
+.preset-editor-head,
+.preset-editor-actions,
+.preset-page-actions,
+.preset-source {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.preset-editor-head {
+  justify-content: space-between;
+  margin-bottom: 13px;
+}
+
+.preset-editor-head h3 {
+  margin-bottom: 3px;
+  font-size: 18px;
+}
+
+.preset-page-actions button {
+  min-width: 40px;
+  padding: 0 10px;
+}
+
+.preset-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field > span {
+  color: var(--muted);
+  font: 11px/1.3 var(--mono);
+}
+
+.field.wide {
+  grid-column: 1 / -1;
+}
+
+.field textarea {
+  width: 100%;
+  resize: vertical;
+  line-height: 1.58;
+}
+
+.check-field {
+  align-content: start;
+}
+
+.check-field input {
+  width: 42px;
+  min-height: 38px;
+  margin: 0;
+  accent-color: var(--cyan);
+}
+
+.preset-source {
+  flex-wrap: wrap;
+  margin: 11px 0;
+  color: var(--faint);
+  font: 10px/1.4 var(--mono);
+}
+
+.preset-source span {
+  padding: 4px 7px;
+  border: 1px solid rgba(74, 119, 117, 0.36);
+  border-radius: 999px;
+}
+
+.preset-editor-actions {
+  flex-wrap: wrap;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+button.danger {
+  color: var(--red);
+  border-color: rgba(220, 111, 103, 0.48);
+}
+
+.preset-empty {
+  display: grid;
+  place-content: center;
+  min-height: 420px;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
 details {
   width: 100%;
   padding: 7px 9px;
@@ -445,6 +665,35 @@ textarea:focus {
   .preset-row-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .preset-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .preset-toolbar input {
+    grid-column: 1 / -1;
+  }
+
+  .preset-manager {
+    grid-template-columns: 1fr;
+  }
+
+  .preset-browser {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .preset-list {
+    max-height: 240px;
+  }
+
+  .preset-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .preset-editor {
+    padding: 12px;
   }
 
   .status-row > :nth-child(2),

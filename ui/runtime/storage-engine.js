@@ -41,6 +41,8 @@
     pluginEnabled: {},
     presetEnabled: {},
     presetOrder: [],
+    presetCustom: [],
+    presetEdits: {},
     modelRoutes: {},
     reducedMotion: false
   });
