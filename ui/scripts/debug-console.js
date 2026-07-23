@@ -56,21 +56,27 @@
   function renderModels() {
     var target = page('models');
     var caps = window.RPHost.capabilities();
+    var settings = window.RPHost.settings();
     var routes = window.RPModels.routes();
     var rows = Object.keys(routes).map(function (id) {
       var route = routes[id];
       var available = id === 'embedding' ? caps.embeddings : caps.generation;
       return '<div class="data-row"><div><strong>' + escapeHtml(route.label) + '</strong><div class="tiny">' + escapeHtml(id) + '</div></div>' +
         '<div><code>' + escapeHtml(route.model || '继承宿主：' + route.inherit) + '</code></div>' +
-        badge(available ? '桥接可用' : '等待宿主', available ? 'ok' : 'warn') + '</div>';
+        badge(available ? '直连可用' : '等待设置', available ? 'ok' : 'warn') + '</div>';
     }).join('');
     target.innerHTML = pageHead(
       '模型路由',
-      '卡内只保存模型 ID 与参数，不保存 API Key。当前宿主未提供增强桥时，主叙事只能退回 triggerSlash。',
+      '运行时从同源 RP-Hub 设置读取当前端点与模型；密钥只留在请求闭包，不进入诊断、存档或界面。',
       '<button type="button" class="secondary" id="refreshModels">刷新模型</button>'
-    ) + '<div class="debug-card"><div class="row-list">' + rows + '</div></div>';
+    ) + '<div class="card-grid" style="margin-bottom:10px">' +
+      '<article class="debug-card"><div class="metric"><span>配置状态</span><strong>' + (caps.sameOriginSettings ? 'READY' : 'WAIT') + '</strong></div></article>' +
+      '<article class="debug-card"><div class="metric"><span>可见模型</span><strong>' + window.RPModels.models().length + '</strong></div></article>' +
+      '<article class="debug-card"><div class="tiny">端点</div><code>' + escapeHtml(settings && settings.apiUrl || '未读取') + '</code></article>' +
+      '</div><div class="debug-card"><div class="row-list">' + rows + '</div></div>';
     target.querySelector('#refreshModels').onclick = async function () {
       this.disabled = true;
+      await window.RPHost.refresh();
       await window.RPModels.refreshModels();
       this.disabled = false;
       renderModels();

@@ -575,22 +575,121 @@ textarea:focus {
   min-height: 670px;
 }
 
-.empty-renderer {
+.conversation-stage {
   display: grid;
-  place-items: center;
-  align-content: center;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 670px;
-  padding: 32px;
-  text-align: center;
   background:
     linear-gradient(rgba(116, 212, 192, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(116, 212, 192, 0.05) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 
-.empty-renderer p:not(.eyebrow) {
-  max-width: 620px;
+.conversation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(7, 18, 20, 0.94);
+}
+
+.conversation-head h2 {
+  margin: 0;
+}
+
+.conversation-log {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  max-height: 486px;
+  overflow: auto;
+  padding: 18px clamp(14px, 6vw, 72px);
+}
+
+.conversation-message {
+  width: min(820px, 92%);
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(6, 18, 20, 0.9);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+}
+
+.conversation-message.user {
+  justify-self: end;
+  border-color: rgba(216, 182, 107, 0.45);
+  background: rgba(52, 43, 25, 0.9);
+}
+
+.conversation-message header,
+.message-tools,
+.conversation-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.conversation-message header {
+  justify-content: space-between;
+  margin-bottom: 9px;
   color: var(--muted);
+  font: 10px/1 var(--mono);
+}
+
+.message-content {
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+}
+
+.message-tools {
+  justify-content: flex-end;
+  margin-top: 10px;
+  opacity: 0.55;
+}
+
+.message-tools button {
+  min-height: 28px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  background: transparent;
+}
+
+.conversation-empty {
+  place-self: center;
+  max-width: 620px;
+  padding: 42px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.conversation-compose {
+  display: grid;
+  gap: 8px;
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--line);
+  background: rgba(7, 18, 20, 0.97);
+}
+
+.conversation-compose textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: none;
+  line-height: 1.55;
+}
+
+.conversation-buttons {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.conversation-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 12px;
 }
 
 @media (max-width: 760px) {
@@ -628,6 +727,29 @@ textarea:focus {
   .runtime-layout {
     grid-template-columns: 1fr;
     min-height: calc(100dvh - 94px);
+  }
+
+  .game-surface,
+  .conversation-stage {
+    min-height: calc(100dvh - 94px);
+  }
+
+  .conversation-log {
+    max-height: calc(100dvh - 330px);
+    padding: 12px;
+  }
+
+  .conversation-message {
+    width: 96%;
+  }
+
+  .conversation-head,
+  .conversation-compose {
+    padding-inline: 12px;
+  }
+
+  .conversation-buttons button {
+    flex: 1 1 auto;
   }
 
   .debug-nav {

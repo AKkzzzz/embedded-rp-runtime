@@ -18,9 +18,10 @@
 
     var caps = await window.RPHost.detect();
     var hostChip = document.getElementById('hostChip');
-    hostChip.textContent = caps.enhancedBridge ? '增强桥已连接' : '标准兼容模式';
-    hostChip.classList.add(caps.enhancedBridge ? 'ok' : 'degraded');
+    hostChip.textContent = caps.sameOriginSettings ? 'RP-Hub 配置已接入' : '等待 RP-Hub API 设置';
+    hostChip.classList.add(caps.sameOriginSettings ? 'ok' : 'degraded');
 
+    window.RPConversationConsole.init();
     window.RPDebugConsole.renderAll();
     var initialPage = window.RPStorage.getPreferences().activeDebugPage || 'overview';
     window.RPDebugConsole.activate(initialPage);
@@ -30,7 +31,7 @@
       var result = window.RPStateGuard.applyPatch(state, {
         runtime: {
           mode: 'game',
-          renderer: 'none',
+        renderer: 'none',
           started: true
         }
       }, window.RPTemplateData.stateSchema);
@@ -41,6 +42,7 @@
       window.RPStorage.saveCanonical(result.value);
       document.querySelector('.runtime-layout').hidden = true;
       document.getElementById('gameSurface').hidden = false;
+      window.RPConversationConsole.render();
       await window.RPEvents.emit('runtime:start', { renderer: 'none' });
     };
 

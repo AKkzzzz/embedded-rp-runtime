@@ -45,17 +45,25 @@ for (const needle of [
   'window.RPMemory',
   'window.RPPlugins',
   'window.RPPrompt',
+  'window.RPConversation',
   'window.RPDiagnostics',
   'window.RPPresetManager'
 ]) {
   if (!inner.includes(needle)) throw new Error(`inner runtime missing ${needle}`);
 }
 
-for (const forbidden of [
+for (const required of [
+  'RPHubDB',
   'rp_hub_settings',
+  'chat/completions',
+  'text/event-stream',
+  'sameOriginSettings'
+]) {
+  if (!inner.includes(required)) throw new Error(`RP-Hub compatibility path missing: ${required}`);
+}
+
+for (const forbidden of [
   'silly_tavern_settings',
-  'apiKey',
-  'Authorization:',
   'window.parent.document',
   'top.eval',
   '<script src="http',
@@ -78,9 +86,11 @@ const runtimeFiles = [
   'ui/runtime/worldbook-patch-store.js',
   'ui/runtime/memory-engine.js',
   'ui/runtime/prompt-compiler.js',
+  'ui/runtime/conversation-engine.js',
   'ui/runtime/diagnostics.js',
   'ui/scripts/preset-manager.js',
   'ui/scripts/debug-console.js',
+  'ui/scripts/conversation-console.js',
   'ui/scripts/bootstrap.js'
 ];
 for (const relative of runtimeFiles) {

@@ -46,11 +46,29 @@
     </section>
 
     <section class="game-surface" id="gameSurface" hidden>
-      <div class="empty-renderer">
-        <p class="eyebrow">RENDERER SLOT</p>
-        <h2>底层已启动，尚未安装应用表现层</h2>
-        <p>这里将由 Galgame、电子书或战棋 renderer 接管。Debug 后台仍在同一运行时中。</p>
-        <button type="button" class="secondary" id="backToDebug">返回后台</button>
+      <div class="conversation-stage">
+        <header class="conversation-head">
+          <div>
+            <p class="eyebrow">SINGLE STAGE / RUNTIME HARNESS</p>
+            <h2>持久单舞台</h2>
+          </div>
+          <div class="runtime-actions">
+            <span class="host-chip" id="gameStatus">待机</span>
+            <button type="button" class="secondary" id="backToDebug">后台</button>
+          </div>
+        </header>
+        <section class="conversation-log" id="conversationLog" aria-live="polite"></section>
+        <footer class="conversation-compose">
+          <textarea id="conversationInput" rows="3" placeholder="输入行动、对白或指令……"></textarea>
+          <div class="conversation-buttons">
+            <button type="button" class="secondary" id="continueButton">继续</button>
+            <button type="button" class="secondary" id="regenerateButton">重生成</button>
+            <button type="button" class="secondary" id="clearConversationButton">清空</button>
+            <button type="button" class="secondary" id="stopGenerationButton" hidden>停止</button>
+            <button type="button" class="primary" id="sendConversationButton">发送</button>
+          </div>
+          <p class="conversation-error" id="conversationError" hidden></p>
+        </footer>
       </div>
     </section>
   </main>
@@ -72,9 +90,11 @@
   <script src="runtime/worldbook-patch-store.js"></script>
   <script src="runtime/memory-engine.js"></script>
   <script src="runtime/prompt-compiler.js"></script>
+  <script src="runtime/conversation-engine.js"></script>
   <script src="runtime/diagnostics.js"></script>
   <script src="scripts/preset-manager.js"></script>
   <script src="scripts/debug-console.js"></script>
+  <script src="scripts/conversation-console.js"></script>
   <script src="scripts/bootstrap.js"></script>
 </body>
 </html>

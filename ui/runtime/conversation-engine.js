@@ -1,0 +1,225 @@
+(function () {
+  'use strict';
+
+  var active = null;
+  var sequence = 0;
+
+  function clone(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+
+  function now() {
+    return new Date().toISOString();
+  }
+
+  function id(role) {
+    sequence += 1;
+    return role + '-' + Date.now().toString(36) + '-' + sequence.toString(36);
+  }
+
+  function canonicalConversation() {
+    return window.RPStorage.getCanonical().conversation;
+  }
+
+  function persist(messages, status) {
+    var state = window.RPStorage.getCanonical();
+    state.conversation = {
+      revision: Number(state.conversation.revision || 1) + 1,
+      messages: clone(messages),
+      status: status || 'idle'
+    };
+    window.RPStorage.saveCanonical(state);
+    return clone(state.conversation);
+  }
+
+  function visible() {
+    var messages = canonicalConversation().messages.slice();
+    if (active && active.draft) messages.push(clone(active.draft));
+    return messages;
+  }
+
+  function history(messages) {
+    return (messages || canonicalConversation().messages).map(function (message) {
+      return { role: message.role, content: String(message.content || '') };
+    });
+  }
+
+  async function changed(reason) {
+    await window.RPEvents.emit('conversation:changed', {
+      reason: reason,
+      generating: Boolean(active),
+      messages: visible()
+    });
+  }
+
+  async function generateWith(input, baseMessages, options) {
+    options = options || {};
+    if (active) throw new Error('已有生成任务正在进行');
+    var controller = new AbortController();
+    var draft = {
+      id: id('assistant'),
+      role: 'assistant',
+      content: options.seed || '',
+      reasoning: '',
+      createdAt: now(),
+      status: 'complete'
+    };
+    active = { controller: controller, draft: draft, mode: options.mode || 'send' };
+    persist(baseMessages, 'generating');
+    await changed('generation-start');
+    try {
+      var compiled = await window.RPPrompt.compile(input, {
+        history: history(options.historyMessages || baseMessages),
+        character: window.RPCardContext || null
+      });
+      var result = await window.RPModels.generate('narrative', compiled.messages, {
+        signal: controller.signal,
+        onDelta: function (delta) {
+          draft.content += delta;
+          changed('stream-delta');
+        },
+        onReasoning: function (delta) {
+          draft.reasoning += delta;
+          changed('reasoning-delta');
+        }
+      });
+      if (!draft.content && result.content) draft.content = result.content;
+      if (!draft.reasoning && result.reasoning) draft.reasoning = result.reasoning;
+      var finalMessages = baseMessages.slice();
+      if (options.appendToId) {
+        var index = finalMessages.findIndex(function (message) { return message.id === options.appendToId; });
+        if (index >= 0) {
+          finalMessages[index] = Object.assign({}, finalMessages[index], {
+            content: String(finalMessages[index].content || '') + draft.content,
+            reasoning: String(finalMessages[index].reasoning || '') + draft.reasoning,
+            status: 'complete'
+          });
+        }
+      } else {
+        finalMessages.push(clone(draft));
+      }
+      active = null;
+      persist(finalMessages, 'idle');
+      await changed('generation-complete');
+      return clone(draft);
+    } catch (error) {
+      var interrupted = error && error.name === 'AbortError';
+      var failedMessages = baseMessages.slice();
+      if (!options.appendToId && draft.content) {
+        draft.status = interrupted ? 'interrupted' : 'error';
+        failedMessages.push(clone(draft));
+      }
+      active = null;
+      persist(failedMessages, 'idle');
+      await changed(interrupted ? 'generation-stopped' : 'generation-error');
+      if (!interrupted) throw error;
+      return clone(draft);
+    }
+  }
+
+  async function send(text) {
+    var input = String(text || '').trim();
+    if (!input) throw new Error('请输入内容');
+    var messages = canonicalConversation().messages.slice();
+    messages.push({
+      id: id('user'),
+      role: 'user',
+      content: input,
+      reasoning: '',
+      createdAt: now(),
+      status: 'complete'
+    });
+    persist(messages, 'idle');
+    await changed('user-message');
+    return generateWith(input, messages, { historyMessages: messages.slice(0, -1) });
+  }
+
+  function stop() {
+    if (!active) return false;
+    active.controller.abort();
+    return true;
+  }
+
+  async function regenerate() {
+    var messages = canonicalConversation().messages.slice();
+    var assistantIndex = -1;
+    for (var index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === 'assistant') {
+        assistantIndex = index;
+        break;
+      }
+    }
+    if (assistantIndex < 1 || messages[assistantIndex - 1].role !== 'user') {
+      throw new Error('没有可重新生成的回复');
+    }
+    var user = messages[assistantIndex - 1];
+    var base = messages.slice(0, assistantIndex);
+    persist(base, 'idle');
+    return generateWith(user.content, base, {
+      mode: 'regenerate',
+      historyMessages: base.slice(0, -1)
+    });
+  }
+
+  async function continueLast() {
+    var messages = canonicalConversation().messages.slice();
+    var last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant') throw new Error('没有可继续的助手回复');
+    return generateWith('请自然地继续上一条回复，不要复述已经写出的内容。', messages, {
+      mode: 'continue',
+      appendToId: last.id
+    });
+  }
+
+  async function edit(messageId, content) {
+    if (active) throw new Error('请先停止当前生成');
+    var messages = canonicalConversation().messages.slice();
+    var index = messages.findIndex(function (message) { return message.id === messageId; });
+    if (index < 0) throw new Error('消息不存在');
+    messages[index].content = String(content || '').trim();
+    messages = messages.slice(0, index + 1);
+    persist(messages, 'idle');
+    await changed('message-edited');
+    return clone(messages[index]);
+  }
+
+  async function remove(messageId) {
+    if (active) throw new Error('请先停止当前生成');
+    var messages = canonicalConversation().messages.slice();
+    var index = messages.findIndex(function (message) { return message.id === messageId; });
+    if (index < 0) return false;
+    messages.splice(index, 1);
+    persist(messages, 'idle');
+    await changed('message-removed');
+    return true;
+  }
+
+  async function clear() {
+    if (active) stop();
+    persist([], 'idle');
+    await changed('conversation-cleared');
+  }
+
+  window.RPConversation = {
+    list: visible,
+    isGenerating: function () { return Boolean(active); },
+    send: send,
+    stop: stop,
+    regenerate: regenerate,
+    continueLast: continueLast,
+    edit: edit,
+    remove: remove,
+    clear: clear,
+    diagnostics: function () {
+      var conversation = canonicalConversation();
+      return {
+        messages: conversation.messages.length,
+        status: conversation.status,
+        activeMode: active && active.mode || ''
+      };
+    }
+  };
+  if (canonicalConversation().status === 'generating') {
+    persist(canonicalConversation().messages, 'idle');
+  }
+})();

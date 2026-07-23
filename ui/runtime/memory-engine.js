@@ -49,7 +49,7 @@
 
   function enqueueEmbedding(memoryIds) {
     var caps = window.RPHost.capabilities();
-    if (!caps.embeddings) return { ok: false, error: 'embedding bridge unavailable' };
+    if (!caps.embeddings) return { ok: false, error: 'embedding route unavailable' };
     memoryIds.forEach(function (id) {
       if (!queue.some(function (task) { return task.memoryId === id && task.status !== 'done'; })) {
         queue.push({ id: 'embed-' + id, memoryId: id, status: 'pending', attempts: 0 });

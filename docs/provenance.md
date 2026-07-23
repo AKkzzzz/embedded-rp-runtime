@@ -14,8 +14,8 @@
 - 不复制上述项目的实现代码；
 - 不把 SillyTavern 扩展直接安装到 RP-Hub 卡内；
 - 不提供任意远程脚本安装；
-- 不依赖私有宿主内部变量名；
-- 增强能力通过新定义的受限 postMessage 协议完成；
+- RP-Hub 兼容适配只依赖官方当前使用的 `RPHubDB/store/rp_hub_settings` 持久化键与 OpenAI 兼容接口；
+- 该同源键属于兼容基线，RP-Hub 上游变更时由回归测试与兼容台账同步；
 - 如果未来采用或修改参考项目代码，先单独审计许可证、署名和分发条件。
 
 ## RP-Hub 预设
@@ -34,3 +34,7 @@
 `ui/runtime/worldbook-engine.js` 与 `ui/runtime/prompt-compiler.js` 参考本地 RP-Hub `092ab90` 的字段归一化、历史扫描、概率判定和七类位置注入语义重新实现，并保留源码注释署名。模板没有复制 RP-Hub 的整段应用代码；兼容层继续遵守 CC BY-NC 4.0。
 
 模板额外提供 RP-Hub 当前没有的显式 `dependencies` 递归、状态触发、可选字符预算和事务化模型补丁。这些扩展不会写入标准 RP-Hub 世界书导出字段。
+
+## RP-Hub 模型兼容层
+
+`ui/runtime/host-bridge.js` 与 `ui/runtime/model-gateway.js` 依据本地 RP-Hub `092ab90` 的设置持久化键、端点拼接和聊天请求形状重新实现。模板不复制 RP-Hub 的 Vue 应用代码；兼容层读取同源设置后只发送 `model`、`messages`、`temperature` 与 `stream`，并独立处理流式增量和原生 reasoning 字段。

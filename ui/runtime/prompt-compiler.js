@@ -73,7 +73,7 @@
       history: [],
       state: window.RPStorage.getCanonical(),
       worldbook: {},
-      character: null,
+      character: window.RPCardContext || null,
       memoryTopK: 8
     }, options || {});
     var started = performance.now();

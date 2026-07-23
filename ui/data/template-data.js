@@ -85,6 +85,11 @@
         location: 'Runtime Console',
         time: '未开始'
       },
+      conversation: {
+        revision: 1,
+        messages: [],
+        status: 'idle'
+      },
       knowledge: {
         revision: 1,
         entries: [],
@@ -126,6 +131,31 @@
           },
           required: ['title', 'location', 'time']
         },
+        conversation: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            revision: { type: 'integer', minimum: 1, readOnly: true },
+            status: { type: 'string', enum: ['idle', 'generating'] },
+            messages: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  id: { type: 'string', minLength: 3, maxLength: 120 },
+                  role: { type: 'string', enum: ['user', 'assistant'] },
+                  content: { type: 'string', maxLength: 200000 },
+                  reasoning: { type: 'string', maxLength: 200000 },
+                  createdAt: { type: 'string', minLength: 1, maxLength: 80 },
+                  status: { type: 'string', enum: ['complete', 'interrupted', 'error'] }
+                },
+                required: ['id', 'role', 'content', 'createdAt', 'status']
+              }
+            }
+          },
+          required: ['revision', 'messages', 'status']
+        },
         knowledge: {
           type: 'object',
           additionalProperties: false,
@@ -166,7 +196,7 @@
         },
         flags: { type: 'object', additionalProperties: true }
       },
-      required: ['runtime', 'player', 'scene', 'knowledge', 'flags']
+      required: ['runtime', 'player', 'scene', 'conversation', 'knowledge', 'flags']
     },
     plugins: [
       {

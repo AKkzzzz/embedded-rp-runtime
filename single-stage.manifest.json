@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "mode": "embedded-rp-runtime",
+  "schemaVersion": 1,
+  "mode": "persistent-single-stage-galgame",
   "appId": "nanami-embedded-rp-runtime-template",
   "marker": "<<<nanami_embedded_rp_runtime_v1>>>",
   "storagePrefix": "nanami_embedded_rp_runtime_v1",
@@ -28,8 +28,10 @@
       "summarize",
       "embedding"
     ],
-    "credentialPolicy": "host-proxy-only",
-    "fallbackMode": "trigger-slash"
+    "credentialPolicy": "rphub-same-origin-read",
+    "requestMode": "direct-openai-compatible",
+    "streaming": true,
+    "fallbackMode": "diagnostic-only"
   },
   "plugins": [
     {

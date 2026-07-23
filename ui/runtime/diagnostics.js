@@ -20,6 +20,7 @@
         available: window.RPModels.models(),
         calls: window.RPModels.diagnostics()
       },
+      conversation: window.RPConversation.diagnostics(),
       presets: window.RPPresets.list(),
       plugins: window.RPPlugins.list(),
       memory: window.RPMemory.stats(),

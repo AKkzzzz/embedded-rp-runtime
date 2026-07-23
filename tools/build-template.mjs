@@ -33,6 +33,13 @@ function ratio(value) {
 
 function inlineUi() {
   let html = read('index.html');
+  const cardContext = {
+    name: core.name,
+    personality: core.personality,
+    scenario: core.scenario,
+    mes_example: core.mes_example || ''
+  };
+  html = html.replace('</head>', `<script>window.RPCardContext=${JSON.stringify(cardContext).replace(/<\/script/gi, '<\\\\/script')};<\/script></head>`);
   html = html.replace(/\s*<link rel="stylesheet" href="([^"]+)">/g, (_match, href) => {
     return `<style>\n${read(href)}\n</style>`;
   });

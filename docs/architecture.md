@@ -6,8 +6,8 @@
 
 ```text
 宿主层
-  Host Capability Bridge
-  RP-Hub / Preview / Future Host adapters
+  RP-Hub Same-origin Settings Adapter
+  Preview / Future Host adapters
 
 服务层
   Model Gateway
@@ -40,16 +40,16 @@
 
 ### Host Capability Bridge
 
-卡内 iframe 不应猜测宿主内部数据结构，更不应读取 API Key。桥只暴露经过许可的能力：
+卡内 iframe 使用 RP-Hub 官方当前的同源存储键读取用户已保存的模型设置。适配层只向上暴露脱敏设置与受控请求方法：
 
-- `capabilities.list`
+- `capabilities`
 - `models.list`
 - `generation.create`
-- `embeddings.create`
+- `embeddings.create`（尚未实现）
 - `intent.submit`
 - `records.read`
 
-请求带 `requestId`、运行时 ID 和能力名。宿主只返回结果，不返回凭据。
+Key 只存在于设置适配器闭包；公共设置、诊断和存档都只能看到 `hasApiKey`。
 
 ### Model Gateway
 
@@ -60,7 +60,7 @@
 - `summarize`：记忆压缩；
 - `embedding`：向量嵌入。
 
-route 只保存模型 ID、参数和宿主 provider 引用，不保存 Key。配置可继承 RP-Hub，也可以在模板内覆盖模型 ID。
+route 只保存模型 ID 和参数，不保存 Key。配置可继承 RP-Hub 当前、质量、平衡、快速或变量模型，也可以在模板内覆盖模型 ID。
 
 ### Storage Engine
 
@@ -71,6 +71,8 @@ route 只保存模型 ID、参数和宿主 provider 引用，不保存 Key。配
 - local：当前标签、主题、调试过滤器等纯显示偏好。
 
 localStorage 只保存小型偏好。长历史、向量和版本日志进入 IndexedDB。任何 canonical 修改使用事务和版本号。
+
+当前 Debug 模板先用 localStorage 验证聊天闭环；流式草稿只驻留内存，完成、停止或失败后才落盘，避免每个 token 都写存储。生产应用在长历史阶段迁移到 IndexedDB。
 
 ### Task Queue
 
