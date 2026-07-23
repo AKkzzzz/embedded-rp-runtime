@@ -253,6 +253,41 @@
     }
   }
 
+  async function embed(inputs, options) {
+    options = options || {};
+    var caps = window.RPHost.capabilities();
+    if (!caps.generation) throw new Error(caps.lastError || 'RP-Hub API 设置不可用');
+    var route = routes().embedding;
+    var model = window.RPHost.resolveModel('embedding', route && route.model);
+    if (!model) throw new Error('尚未选择向量嵌入模型');
+    var values = (Array.isArray(inputs) ? inputs : [inputs]).map(function (value) {
+      return String(value || '').trim();
+    }).filter(Boolean);
+    if (!values.length) return [];
+    var response = await window.RPHost.apiFetch('embeddings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model, input: values.length === 1 ? values[0] : values }),
+      signal: options.signal
+    });
+    var raw = await response.text();
+    var data;
+    try { data = JSON.parse(raw); } catch (_error) { throw new Error('无法解析向量接口响应'); }
+    if (!response.ok || data.error) throw apiError(response.status, data);
+    var rows = Array.isArray(data.data) ? data.data.slice().sort(function (a, b) {
+      return Number(a.index || 0) - Number(b.index || 0);
+    }) : [];
+    var vectors = rows.map(function (row) {
+      var vector = row && (row.embedding || row.values);
+      return Array.isArray(vector) ? vector.map(Number).filter(Number.isFinite) : [];
+    });
+    if (vectors.length !== values.length || vectors.some(function (vector) { return !vector.length; })) {
+      throw new Error('向量接口返回的数据不完整');
+    }
+    remember({ kind: 'embedding', model: model, status: 'ok', count: vectors.length });
+    return vectors;
+  }
+
   function setRoute(id, patch) {
     if (!authoredRoutes[id]) return false;
     var preferences = window.RPStorage.getPreferences();
@@ -268,6 +303,7 @@
     models: function () { return clone(models); },
     refreshModels: refreshModels,
     generate: generate,
+    embed: embed,
     setRoute: setRoute,
     diagnostics: function () { return clone(diagnostics); },
     parseSseText: parseSseText,

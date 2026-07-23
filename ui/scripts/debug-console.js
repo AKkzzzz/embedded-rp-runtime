@@ -43,7 +43,8 @@
     }).length;
     target.innerHTML = pageHead(
       '运行时总览',
-      '这里显示卡内内核是否具备开始应用所需的基础能力。Debug 模式不会推进故事。'
+      '这里显示卡内内核是否具备开始应用所需的基础能力。Debug 模式不会推进故事。',
+      '<button type="button" class="secondary" id="refreshRuntimeConfig">检查 RP-Hub 配置</button>'
     ) +
       '<div class="card-grid">' +
         '<article class="debug-card"><p class="eyebrow">HOST</p><div class="metric"><span>增强能力</span><strong>' + capabilityCount + '</strong></div><p class="tiny">' + escapeHtml(diagnostic.host.host) + '</p></article>' +
@@ -51,6 +52,14 @@
         '<article class="debug-card"><p class="eyebrow">MEMORY</p><div class="metric"><span>向量覆盖率</span><strong>' + memory.vectorCoverage + '%</strong></div><p class="tiny">' + memory.structured + ' 条结构化记忆</p></article>' +
         '<article class="debug-card wide"><p class="eyebrow">STARTUP GATE</p><h3>Debug 后台 → 选择应用 → Renderer 接管</h3><p class="muted">底层服务不会因切换表现层而重建。Galgame、电子书和战棋共用相同的世界书、状态、记忆、模型路由与插件生命周期。</p></article>' +
       '</div>';
+    target.querySelector('#refreshRuntimeConfig').onclick = async function () {
+      this.disabled = true;
+      await window.RPHost.refresh();
+      await window.RPModels.refreshModels();
+      await window.RPVectorMemory.init();
+      this.disabled = false;
+      renderAll();
+    };
   }
 
   function renderModels() {
@@ -61,8 +70,9 @@
     var rows = Object.keys(routes).map(function (id) {
       var route = routes[id];
       var available = id === 'embedding' ? caps.embeddings : caps.generation;
+      var resolved = window.RPHost.resolveModel(route.inherit, route.model);
       return '<div class="data-row"><div><strong>' + escapeHtml(route.label) + '</strong><div class="tiny">' + escapeHtml(id) + '</div></div>' +
-        '<div><code>' + escapeHtml(route.model || '继承宿主：' + route.inherit) + '</code></div>' +
+        '<div><code>' + escapeHtml(resolved || '未选择（继承：' + route.inherit + '）') + '</code><div class="tiny">' + (route.model ? '卡内覆盖' : '继承 RP-Hub') + '</div></div>' +
         badge(available ? '直连可用' : '等待设置', available ? 'ok' : 'warn') + '</div>';
     }).join('');
     target.innerHTML = pageHead(
@@ -205,18 +215,51 @@
   function renderMemory() {
     var target = page('memory');
     var stats = window.RPMemory.stats();
+    var vectorStats = window.RPVectorMemory.stats();
+    var preferences = window.RPStorage.getPreferences();
+    var memorySettings = Object.assign({
+      vectorEnabled: false,
+      summaryEnabled: false,
+      inheritRpHub: true,
+      autoIndex: true,
+      maxHistoryFloors: 50,
+      topK: 10,
+      similarityThreshold: 0.5,
+      summaryEveryFloors: 10,
+      maxVectors: 2000
+    }, preferences.memoryModules || {});
     var rows = window.RPMemory.listStructured().map(function (memory) {
       return '<div class="data-row stack"><div><strong>' + escapeHtml(memory.title) + '</strong> ' + badge(memory.kind) + '</div><p class="muted">' +
         escapeHtml(memory.summary) + '</p><div class="tiny">来源：' + escapeHtml((memory.sourceIds || []).join(', ')) + '</div></div>';
     }).join('');
     target.innerHTML = pageHead(
       '结构化记忆与向量索引',
-      '结构化记忆保存已发生事实；向量只是带来源的检索索引。宿主未提供 embedding 桥时不会静默读取凭据。'
+      '向量和总结默认关闭；开启后继承 RP-Hub 当前已选择的 embedding/平衡模型，不另填 API。历史超过保留楼层后，Prompt 只带最近楼层，旧内容通过向量和总结召回。'
     ) +
       '<div class="card-grid"><article class="debug-card"><div class="metric"><span>结构化</span><strong>' + stats.structured + '</strong></div></article>' +
-      '<article class="debug-card"><div class="metric"><span>向量</span><strong>' + stats.vector + '</strong></div></article>' +
+      '<article class="debug-card"><div class="metric"><span>向量</span><strong>' + vectorStats.total + '</strong></div></article>' +
       '<article class="debug-card"><div class="metric"><span>队列</span><strong>' + stats.queuePending + '</strong></div></article>' +
+      '<article class="debug-card wide"><div class="card-grid">' +
+        '<label class="field"><span>向量召回</span><input type="checkbox" id="vectorEnabled" ' + (memorySettings.vectorEnabled ? 'checked' : '') + '><small>使用 RP-Hub embedding 模型建立卡内向量库</small></label>' +
+        '<label class="field"><span>自动建立向量</span><input type="checkbox" id="autoIndex" ' + (memorySettings.autoIndex ? 'checked' : '') + '><small>回复完成后后台批量处理，不参与流式过程</small></label>' +
+        '<label class="field"><span>历史保留楼层</span><input id="maxHistoryFloors" type="number" min="0" max="200" value="' + Number(memorySettings.maxHistoryFloors) + '"><small>0 表示不裁剪；默认 50</small></label>' +
+        '<label class="field"><span>总结模块</span><input type="checkbox" id="summaryEnabled" ' + (memorySettings.summaryEnabled ? 'checked' : '') + '><small>使用总结 route 压缩旧历史，默认继承平衡模型</small></label>' +
+        '<label class="field"><span>每隔多少楼总结</span><input id="summaryEveryFloors" type="number" min="2" max="100" value="' + Number(memorySettings.summaryEveryFloors) + '"><small>总结只在超过保留楼层后触发</small></label>' +
+      '</div><div class="control-line" style="margin-top:10px"><button id="saveMemorySettings" class="primary">保存记忆设置</button><span class="tiny" id="memorySettingsStatus">当前默认继承 RP-Hub</span></div></article>' +
       '<article class="debug-card wide"><div class="row-list">' + rows + '</div></article></div>';
+    target.querySelector('#saveMemorySettings').onclick = function () {
+      var next = Object.assign({}, memorySettings, {
+        vectorEnabled: target.querySelector('#vectorEnabled').checked,
+        autoIndex: target.querySelector('#autoIndex').checked,
+        summaryEnabled: target.querySelector('#summaryEnabled').checked,
+        maxHistoryFloors: Math.max(0, Math.min(200, Number(target.querySelector('#maxHistoryFloors').value) || 0)),
+        summaryEveryFloors: Math.max(2, Math.min(100, Number(target.querySelector('#summaryEveryFloors').value) || 10)),
+        inheritRpHub: true
+      });
+      window.RPStorage.savePreferences({ memoryModules: next });
+      target.querySelector('#memorySettingsStatus').textContent = '已保存；向量模型和总结模型继承 RP-Hub';
+      renderMemory();
+    };
   }
 
   function renderDiagnostics() {

@@ -81,6 +81,10 @@
     var retrieval = window.RPWorldbook.retrieve(input, retrievalOptions);
     var groups = groupHits(retrieval.hits);
     var memories = window.RPMemory.searchStructured(input, { topK: options.memoryTopK });
+    var summaries = window.RPMemory.listStructured().filter(function (memory) {
+      return memory.kind === 'summary' && memory.stale !== true;
+    }).slice(-3);
+    var vectorMemories = await window.RPMemory.searchVectors(input, { signal: options.signal });
     var presetGroups = window.RPPresets.compile();
     var messages = [];
 
@@ -122,6 +126,25 @@
           return '- ' + memory.title + '：' + memory.summary;
         }).join('\n'),
         source: 'memory:structured'
+      });
+    }
+    if (vectorMemories.length) {
+      messages.push({
+        role: 'system',
+        content: '【相关历史向量记忆】\n以下内容来自较早剧情的语义检索，不是当前现场；只把有证据的内容作为背景参考：\n' +
+          vectorMemories.map(function (memory) {
+            return '- ' + memory.sourceText + '（相关度 ' + Number(memory.retrievalScore || 0).toFixed(2) + '）';
+          }).join('\n'),
+        source: 'memory:vector'
+      });
+    }
+    if (summaries.length) {
+      messages.push({
+        role: 'system',
+        content: '【历史总结】\n' + summaries.map(function (memory) {
+          return '- ' + memory.summary;
+        }).join('\n\n') + '\n这些总结来自较早楼层，只用于保持长期连续性。',
+        source: 'memory:summary'
       });
     }
     messages.push({

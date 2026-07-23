@@ -104,6 +104,8 @@
       balancedModel: String(value.balancedModel || '').trim(),
       fastModel: String(value.fastModel || '').trim(),
       uiTemplateModel: String(value.uiTemplateModel || '').trim(),
+      embeddingModel: String(value.embeddingModel || '').trim(),
+      summaryModel: String(value.summaryModel || value.summarizeModel || '').trim(),
       temperature: Number.isFinite(Number(value.temperature)) ? Number(value.temperature) : 1,
       stream: value.stream !== false
     });
@@ -119,6 +121,8 @@
       balancedModel: cachedSettings.balancedModel,
       fastModel: cachedSettings.fastModel,
       uiTemplateModel: cachedSettings.uiTemplateModel,
+      embeddingModel: cachedSettings.embeddingModel,
+      summaryModel: cachedSettings.summaryModel,
       temperature: cachedSettings.temperature,
       stream: cachedSettings.stream,
       hasApiKey: Boolean(cachedSettings.apiKey)
@@ -134,7 +138,7 @@
       intentSubmit: typeof window.triggerSlash === 'function',
       modelsList: configured && typeof fetch === 'function',
       generation: configured && typeof fetch === 'function',
-      embeddings: false,
+      embeddings: configured && typeof fetch === 'function',
       recordsRead: typeof window.rpHubGetCardRecords === 'function',
       settingsDetected: detected,
       lastError: lastError
@@ -184,6 +188,8 @@
       balanced: cachedSettings.balancedModel || cachedSettings.model,
       fast: cachedSettings.fastModel || cachedSettings.model,
       variable: cachedSettings.uiTemplateModel || cachedSettings.balancedModel || cachedSettings.model
+      ,embedding: cachedSettings.embeddingModel || cachedSettings.balancedModel || cachedSettings.model
+      ,summarize: cachedSettings.summaryModel || cachedSettings.balancedModel || cachedSettings.model
     };
     return aliases[inherit] || cachedSettings.model || '';
   }

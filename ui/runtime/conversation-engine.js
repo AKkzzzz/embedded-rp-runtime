@@ -68,8 +68,12 @@
     persist(baseMessages, 'generating');
     await changed('generation-start');
     try {
+      var configured = window.RPStorage.getPreferences().memoryModules || {};
+      var maxFloors = Math.max(0, Number(configured.maxHistoryFloors || 50));
+      var sourceHistory = options.historyMessages || baseMessages;
+      var promptHistory = maxFloors > 0 ? sourceHistory.slice(-maxFloors * 2) : sourceHistory;
       var compiled = await window.RPPrompt.compile(input, {
-        history: history(options.historyMessages || baseMessages),
+        history: history(promptHistory),
         character: window.RPCardContext || null
       });
       var result = await window.RPModels.generate('narrative', compiled.messages, {
@@ -100,6 +104,16 @@
       }
       active = null;
       persist(finalMessages, 'idle');
+      if (window.RPVectorMemory) {
+        window.RPVectorMemory.indexMessages(finalMessages).catch(function (error) {
+          window.RPEvents.emit('memory:vector:error', { message: String(error.message || error) });
+        });
+      }
+      if (window.RPSummary && window.RPSummary.shouldSummarize(finalMessages)) {
+        window.RPSummary.summarize(finalMessages).catch(function (error) {
+          window.RPEvents.emit('memory:summary:error', { message: String(error.message || error) });
+        });
+      }
       await changed('generation-complete');
       return clone(draft);
     } catch (error) {

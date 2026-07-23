@@ -17,6 +17,7 @@
     });
 
     var caps = await window.RPHost.detect();
+    await window.RPVectorMemory.init();
     var hostChip = document.getElementById('hostChip');
     hostChip.textContent = caps.sameOriginSettings ? 'RP-Hub 配置已接入' : '等待 RP-Hub API 设置';
     hostChip.classList.add(caps.sameOriginSettings ? 'ok' : 'degraded');

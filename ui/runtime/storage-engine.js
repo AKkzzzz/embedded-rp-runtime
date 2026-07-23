@@ -44,7 +44,18 @@
     presetCustom: [],
     presetEdits: {},
     modelRoutes: {},
-    reducedMotion: false
+    reducedMotion: false,
+    memoryModules: {
+      vectorEnabled: false,
+      summaryEnabled: false,
+      inheritRpHub: true,
+      autoIndex: true,
+      maxHistoryFloors: 50,
+      topK: 10,
+      similarityThreshold: 0.5,
+      summaryEveryFloors: 10,
+      maxVectors: 2000
+    }
   });
 
   function saveCanonical(next) {

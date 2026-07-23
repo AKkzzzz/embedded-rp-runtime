@@ -12,7 +12,8 @@
       narrative: { label: '主叙事', inherit: 'current', model: '', temperature: 0.82 },
       state: { label: '状态整理', inherit: 'variable', model: '', temperature: 0.2 },
       summarize: { label: '记忆摘要', inherit: 'balanced', model: '', temperature: 0.3 },
-      embedding: { label: '向量嵌入', inherit: 'embedding', model: '', dimensions: null }
+      embedding: { label: '向量嵌入', inherit: 'embedding', model: '', dimensions: null },
+      summary: { label: '历史总结', inherit: 'summarize', model: '', temperature: 0.2 }
     },
     presets: [],
     worldbookSettings: {

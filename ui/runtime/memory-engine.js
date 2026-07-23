@@ -3,6 +3,10 @@
 
   var authored = window.RPTemplateData.memory;
   var structured = authored.structured.slice();
+  try {
+    var saved = JSON.parse(localStorage.getItem(window.RPTemplateData.app.storagePrefix + ':structured-memory') || 'null');
+    if (Array.isArray(saved)) structured = structured.concat(saved);
+  } catch (_error) {}
   var vectors = authored.vectors.slice();
   var queue = [];
 
@@ -43,6 +47,13 @@
       createdAt: new Date().toISOString(),
       stale: false
     }, memory));
+    try {
+      localStorage.setItem(window.RPTemplateData.app.storagePrefix + ':structured-memory', JSON.stringify(
+        structured.filter(function (item) {
+          return !authored.structured.some(function (base) { return base.id === item.id; });
+        })
+      ));
+    } catch (_error) {}
     window.RPEvents.emit('memory:structured:changed', { id: memory.id, action: 'add' });
     return { ok: true };
   }
@@ -74,6 +85,9 @@
     searchStructured: searchStructured,
     addStructured: addStructured,
     enqueueEmbedding: enqueueEmbedding,
+    searchVectors: function (query, options) {
+      return window.RPVectorMemory ? window.RPVectorMemory.search(query, options) : Promise.resolve([]);
+    },
     queue: function () { return queue.map(function (item) { return Object.assign({}, item); }); },
     stats: stats
   };

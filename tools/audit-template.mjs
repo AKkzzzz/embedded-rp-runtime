@@ -43,6 +43,8 @@ for (const needle of [
   'window.RPWorldbook',
   'window.RPStateGuard',
   'window.RPMemory',
+  'window.RPVectorMemory',
+  'window.RPSummary',
   'window.RPPlugins',
   'window.RPPrompt',
   'window.RPConversation',
@@ -56,6 +58,7 @@ for (const required of [
   'RPHubDB',
   'rp_hub_settings',
   'chat/completions',
+  'embeddings',
   'text/event-stream',
   'sameOriginSettings'
 ]) {
@@ -82,9 +85,11 @@ const runtimeFiles = [
   'ui/runtime/host-bridge.js',
   'ui/runtime/model-gateway.js',
   'ui/runtime/plugin-runtime.js',
+  'ui/runtime/vector-memory-engine.js',
   'ui/runtime/worldbook-engine.js',
   'ui/runtime/worldbook-patch-store.js',
   'ui/runtime/memory-engine.js',
+  'ui/runtime/summary-engine.js',
   'ui/runtime/prompt-compiler.js',
   'ui/runtime/conversation-engine.js',
   'ui/runtime/diagnostics.js',

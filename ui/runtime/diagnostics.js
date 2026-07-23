@@ -24,6 +24,7 @@
       presets: window.RPPresets.list(),
       plugins: window.RPPlugins.list(),
       memory: window.RPMemory.stats(),
+      vectors: window.RPVectorMemory.stats(),
       events: window.RPEvents.inspect(),
       prompt: window.RPPrompt.last()
     };

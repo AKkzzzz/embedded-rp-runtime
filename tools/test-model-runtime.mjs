@@ -128,6 +128,29 @@ const jsonResult = await sandbox.RPModels.generate('narrative', [{ role: 'user',
 assert.equal(jsonResult.content, '非流式回复');
 assert.equal(jsonResult.reasoning, '内部推理');
 
+responses.push(new Response(JSON.stringify({
+  data: [{ index: 0, embedding: [1, 0, 0] }]
+}), {
+  status: 200,
+  headers: { 'content-type': 'application/json' }
+}));
+assert.deepEqual(await sandbox.RPModels.embed(['历史内容']), [[1, 0, 0]]);
+load('ui/runtime/vector-memory-engine.js');
+sandbox.RPStorage.savePreferences({ memoryModules: { vectorEnabled: true, autoIndex: true, topK: 10, similarityThreshold: 0.5 } });
+responses.push(new Response(JSON.stringify({ data: [
+  { index: 0, embedding: [1, 0, 0] },
+  { index: 1, embedding: [0.9, 0.1, 0] }
+] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+assert.equal((await sandbox.RPVectorMemory.indexMessages([
+  { role: 'user', content: '旧港口的钟声' },
+  { role: 'assistant', content: '我们记住了旧港口。' }
+])).added, 2);
+responses.push(new Response(JSON.stringify({ data: [{ index: 0, embedding: [1, 0, 0] }] }), {
+  status: 200, headers: { 'content-type': 'application/json' }
+}));
+assert.equal((await sandbox.RPVectorMemory.search('旧港口')).length, 2);
+sandbox.RPStorage.savePreferences({ memoryModules: { vectorEnabled: false } });
+
 sandbox.RPCardContext = { name: '测试角色', personality: '稳定', scenario: '测试场景' };
 sandbox.RPPrompt = {
   async compile(input, options) {
