@@ -9,7 +9,7 @@
     "projectType": "RP-Hub 单正则 + 插件功能的小卡底层",
     "license": "Community Source-Available Non-Commercial",
     "repositoryOwner": "AKkzzzz",
-    "repository": "",
+    "repository": "https://github.com/AKkzzzz/embedded-rp-runtime",
     "sourceNotice": "发布卡只包含压缩运行产物；开发源码、测试和构建工具不随卡分发。"
   },
   "entryHtml": "ui/index.html",
@@ -170,6 +170,15 @@
       "requires": [],
       "optional": [],
       "capabilities": ["audio:play", "visual:effect", "assets:read", "ui:overlay"]
+    },
+    {
+      "id": "runtime.image-generation",
+      "version": "0.1.0",
+      "enabled": false,
+      "priority": 145,
+      "requires": [],
+      "optional": [],
+      "capabilities": ["image:generate", "assets:read", "ui:overlay"]
     },
     {
       "id": "runtime.prompt-inspector", "version": "0.1.0", "enabled": false, "priority": 150,

@@ -8,6 +8,7 @@
   var cachedMemorySettings = null;
   var lastError = '';
   var detected = false;
+  var IMAGE_GEN_BASE_URL = 'https://nai.sta1n.cn';
 
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -108,6 +109,10 @@
       uiTemplateModel: String(value.uiTemplateModel || '').trim(),
       embeddingModel: String(memoryValue && memoryValue.embeddingModel || value.embeddingModel || '').trim(),
       summaryModel: String(memoryValue && memoryValue.classicModel || value.summaryModel || value.summarizeModel || '').trim(),
+      imageGenKey: String(value.imageGenKey || '').trim(),
+      imageStyle: String(value.imageStyle || 'vertical'),
+      imageSize: String(value.imageSize || '竖图'),
+      imageGenCount: Math.max(1, Math.min(6, Number(value.imageGenCount) || 2)),
       temperature: Number.isFinite(Number(value.temperature)) ? Number(value.temperature) : 1,
       stream: value.stream !== false
     });
@@ -129,6 +134,10 @@
       stream: cachedSettings.stream,
       hasApiKey: Boolean(cachedSettings.apiKey)
       ,memoryMode: String(cachedMemorySettings && cachedMemorySettings.mode || '')
+      ,imageStyle: cachedSettings.imageStyle,
+      imageSize: cachedSettings.imageSize,
+      imageGenCount: cachedSettings.imageGenCount,
+      hasImageGenKey: Boolean(cachedSettings.imageGenKey)
     };
   }
 
@@ -142,6 +151,7 @@
       modelsList: configured && typeof fetch === 'function',
       generation: configured && typeof fetch === 'function',
       embeddings: configured && typeof fetch === 'function',
+      imageGeneration: configured && Boolean(cachedSettings.imageGenKey),
       recordsRead: typeof window.rpHubGetCardRecords === 'function',
       settingsDetected: detected,
       lastError: lastError
@@ -216,6 +226,44 @@
     return false;
   }
 
+  function imageSettings() {
+    if (!cachedSettings) return null;
+    return {
+      style: cachedSettings.imageStyle,
+      size: cachedSettings.imageSize,
+      count: cachedSettings.imageGenCount,
+      configured: Boolean(cachedSettings.imageGenKey),
+      baseUrl: IMAGE_GEN_BASE_URL
+    };
+  }
+
+  function generateImage(prompt, options) {
+    if (!cachedSettings || !cachedSettings.imageGenKey) {
+      return Promise.reject(new Error('RP-Hub 生图密钥未配置'));
+    }
+    options = options || {};
+    var params = new URLSearchParams({
+      tag: String(prompt || '').trim(),
+      token: cachedSettings.imageGenKey,
+      model: String(options.model || 'nai-diffusion-4-5-full'),
+      artist: String(options.artist || ''),
+      size: String(options.size || cachedSettings.imageSize || '竖图'),
+      steps: String(options.steps || 40),
+      scale: String(options.scale || 6),
+      cfg: String(options.cfg || 0),
+      sampler: String(options.sampler || 'k_dpmpp_2m_sde'),
+      negative: String(options.negative || 'bad anatomy,bad hands,bad proportions,blurry,low quality,missing fingers,text,watermark'),
+      nocache: '0',
+      noise_schedule: 'karras'
+    });
+    return Promise.resolve({
+      url: IMAGE_GEN_BASE_URL + '/generate?' + params.toString(),
+      prompt: String(prompt || ''),
+      size: params.get('size'),
+      model: params.get('model')
+    });
+  }
+
   window.RPHost = {
     detect: detect,
     refresh: detect,
@@ -224,6 +272,8 @@
     endpoint: endpoint,
     apiFetch: apiFetch,
     resolveModel: resolveModel,
-    submitIntent: submitIntent
+    submitIntent: submitIntent,
+    imageSettings: imageSettings,
+    generateImage: generateImage
   };
 })();

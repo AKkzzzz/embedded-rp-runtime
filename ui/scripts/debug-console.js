@@ -345,6 +345,52 @@
     });
   }
 
+  function renderImages() {
+    var target = page('images');
+    var caps = window.RPHost.capabilities();
+    var settings = window.RPHost.imageSettings && window.RPHost.imageSettings();
+    var recent = window.RPImageGen ? window.RPImageGen.recent() : [];
+    var cards = recent.map(function (item) {
+      return '<article class="debug-card"><img src="' + escapeHtml(item.url) + '" alt="生成图片" style="width:100%;border-radius:10px;display:block"><p class="tiny">' +
+        escapeHtml(item.prompt) + '</p></article>';
+    }).join('');
+    target.innerHTML = pageHead(
+      'RP-Hub 生图',
+      '复用 RP-Hub 同源生图配置；密钥只在宿主适配器内部使用，图片按需生成，不写入 canonical state。',
+      '<button type="button" class="secondary" id="refreshImageSettings">刷新配置</button>'
+    ) +
+      '<div class="card-grid"><article class="debug-card"><div class="metric"><span>配置状态</span><strong>' + (settings && settings.configured ? 'READY' : 'WAIT') + '</strong></div><p class="tiny">' +
+      escapeHtml(settings ? settings.size + ' · 默认 ' + settings.count + ' 张' : '未检测到 RP-Hub 生图密钥') + '</p></article>' +
+      '<article class="debug-card"><div class="metric"><span>插件状态</span><strong>' + (window.RPPlugins.isEnabled('runtime.image-generation') ? 'ON' : 'OFF') + '</strong></div><p class="tiny">' +
+      escapeHtml(caps.imageGeneration ? '同源配置可用' : '等待 RP-Hub imageGenKey') + '</p><button type="button" class="secondary" id="toggleImagePlugin">' +
+      (window.RPPlugins.isEnabled('runtime.image-generation') ? '关闭生图插件' : '启用生图插件') + '</button></article></div>' +
+      '<article class="debug-card wide"><label class="field"><span>提示词</span><textarea id="imagePrompt" rows="5" style="width:100%" placeholder="例如：anime school library, warm afternoon light, ..."></textarea></label>' +
+      '<div class="control-line"><select id="imageSize"><option>竖图</option><option>横图</option><option>方图</option><option>2K竖图</option><option>2K横图</option><option>2K方图</option></select><button type="button" class="primary" id="generateImage">生成图片</button><span class="tiny" id="imageStatus"></span></div></article>' +
+      '<div class="card-grid">' + (cards || '<article class="debug-card wide"><p class="muted">还没有生成记录。</p></article>') + '</div>';
+    target.querySelector('#refreshImageSettings').onclick = async function () {
+      await window.RPHost.refresh();
+      renderImages();
+    };
+    target.querySelector('#toggleImagePlugin').onclick = async function () {
+      await window.RPPlugins.setEnabled('runtime.image-generation', !window.RPPlugins.isEnabled('runtime.image-generation'));
+      renderImages();
+    };
+    target.querySelector('#generateImage').onclick = async function () {
+      var status = target.querySelector('#imageStatus');
+      var prompt = target.querySelector('#imagePrompt').value.trim();
+      if (!prompt) { status.textContent = '请先输入提示词'; return; }
+      this.disabled = true; status.textContent = '正在生成……';
+      try {
+        await window.RPImageGen.generate(prompt, { size: target.querySelector('#imageSize').value });
+        renderImages();
+      } catch (error) {
+        status.textContent = String(error.message || error);
+      } finally {
+        this.disabled = false;
+      }
+    };
+  }
+
   function renderDiagnostics() {
     var target = page('diagnostics');
     target.innerHTML = pageHead(
@@ -369,6 +415,7 @@
     renderPlugins();
     renderMemory();
     renderTools();
+    renderImages();
     renderDiagnostics();
   }
 
@@ -382,6 +429,7 @@
       plugins: renderPlugins,
       memory: renderMemory,
       tools: renderTools,
+      images: renderImages,
       diagnostics: renderDiagnostics
     };
     if (renderers[id]) renderers[id]();

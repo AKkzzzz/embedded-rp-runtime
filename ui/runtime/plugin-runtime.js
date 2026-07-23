@@ -37,6 +37,7 @@
     'diagrams:render',
     'parameters:modify',
     'lore:diagnose'
+    ,'image:generate'
   ]);
 
   function preference(id, fallback) {

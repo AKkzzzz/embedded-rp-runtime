@@ -97,6 +97,7 @@ RPPlugins.setEnabled('my-plugin', false);
 | `runtime.dynamic-lore` | 动态 Lore 接口 |
 | `runtime.webllm` | 本地模型适配 |
 | `runtime.media-stage` | 音频、视觉事件、Live2D 探测 |
+| `runtime.image-generation` | RP-Hub 同源生图适配与 Debug 生图区 |
 | `runtime.prompt-inspector` | 最终 Prompt 与注入来源检查 |
 | `runtime.guided-generations` | AI 行动建议 |
 | `runtime.character-memory` | 结构化人物记忆 |

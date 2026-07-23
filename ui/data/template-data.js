@@ -355,6 +355,14 @@
         capabilities: ['audio:play', 'visual:effect', 'assets:read', 'ui:overlay']
       },
       {
+        id: 'runtime.image-generation',
+        name: 'RP-Hub 生图',
+        version: '0.1.0',
+        priority: 145,
+        enabled: false,
+        capabilities: ['image:generate', 'assets:read', 'ui:overlay']
+      },
+      {
         id: 'runtime.prompt-inspector', name: 'Prompt Inspector', version: '0.1.0', priority: 150, enabled: false,
         capabilities: ['prompt:inspect', 'conversation:read', 'worldbook:read', 'memory:read', 'state:read', 'ui:overlay']
       },

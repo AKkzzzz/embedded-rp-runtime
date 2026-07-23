@@ -16,6 +16,7 @@
 | Lore Recommender | `RPLoreRecommender.inspect` | 查看命中诊断、重复键和过宽触发词 |
 | Worldbook Tool | `<tool_worldbook:查询>` | 模型主动检索世界书 |
 | Dynamic Audio / Live2D | `RPMedia` | 本地音频、视觉事件、Live2D 能力探测 |
+| RP-Hub Image Generation | `RPImageGen` | 继承同源 `imageGenKey`，在独立 Debug 生图区按需生成图片 |
 
 ## 浮层
 
@@ -50,3 +51,13 @@ RPTools.setEnabled('tool_worldbook', true);
 ```
 
 表现层应调用稳定的 `RP*` 接口，不直接读取插件的 localStorage 键。
+
+## 生图
+
+生图是单独的 `runtime.image-generation` 插件和 Debug → 生图分区，不会自动把图片注入每一轮正文。启用插件后，作者或 renderer 可以调用：
+
+```js
+const image = await RPImageGen.generate('anime library, warm afternoon light, two students');
+```
+
+生成 URL 只在运行时内存和图片元素中使用，不写入 canonical state。正式卡作者可根据电子书或 Galgame 需求，把返回图片保存到自己的展示层或本地资源缓存。

@@ -18,6 +18,7 @@
 - 可选开启卡内向量记忆和历史总结；默认继承 RP-Hub 的 embedding/平衡模型，向量只存卡自己的 IndexedDB。
 - 向量记忆使用 `int8:maxabs:v1` 存储，后台会巡检已完成楼层；embedding 失败时进入卡内重试队列并采用退避重试，不阻塞正文流式输出。
 - 可选的卡内能力插件已按 RP-Hub 体验重写：`runtime.timeline` 提供检查点/分支/回滚，`runtime.rpg-companion` 提供 RPG 状态上下文，`runtime.command-registry` 提供白名单命令，`runtime.variable-overlay` 提供不占舞台空间的浮球变量面板，`runtime.dynamic-lore` 提供状态型动态 Lore，`runtime.webllm` 提供宿主本地模型适配，`runtime.media-stage` 提供音频、视觉效果和 Live2D 能力探测。
+- 独立的 `生图` Debug 分区可以继承 RP-Hub 的 `imageGenKey`、比例、尺寸和数量设置，按需调用 RP-Hub 生图服务；密钥不会进入诊断、canonical state 或发布说明。
 - 这些插件默认关闭，只有卡或用户显式启用才建立监听器和浮层；它们是本地安全适配器，不会原样执行 Tavern Helper、JS-Slash-Runner 或远程扩展脚本。
 
 ## 目标形态
