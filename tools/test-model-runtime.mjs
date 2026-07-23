@@ -138,6 +138,11 @@ responses.push(new Response(JSON.stringify({
 }));
 assert.deepEqual(await sandbox.RPModels.embed(['历史内容']), [[1, 0, 0]]);
 load('ui/runtime/vector-memory-engine.js');
+const packedVector = sandbox.RPVectorMemory.quantize([1, -0.5, 0]);
+assert.equal(packedVector.embeddingEncoding, 'int8:maxabs:v1');
+assert.equal(packedVector.embeddingDims, 3);
+assert.deepEqual(Array.from(sandbox.RPVectorMemory.decode(packedVector.embeddingQ)), [127, -63, 0]);
+assert.equal(sandbox.RPVectorMemory.cosine([1, 0], new Int8Array([127, 0])), 1);
 sandbox.RPStorage.savePreferences({ memoryModules: { vectorEnabled: true, autoIndex: true, topK: 10, similarityThreshold: 0.5 } });
 responses.push(new Response(JSON.stringify({ data: [
   { index: 0, embedding: [1, 0, 0] },
@@ -151,6 +156,20 @@ responses.push(new Response(JSON.stringify({ data: [{ index: 0, embedding: [1, 0
   status: 200, headers: { 'content-type': 'application/json' }
 }));
 assert.equal((await sandbox.RPVectorMemory.search('旧港口')).length, 2);
+responses.push(new Response(JSON.stringify({ error: { message: 'temporary embedding failure' } }), {
+  status: 503, headers: { 'content-type': 'application/json' }
+}));
+const queuedVector = await sandbox.RPVectorMemory.indexMessages([
+  { role: 'user', content: '唯一的失败队列测试消息' }
+]);
+assert.equal(queuedVector.queued, 1);
+assert.equal(sandbox.RPVectorMemory.stats().pending, 1);
+responses.push(new Response(JSON.stringify({
+  data: [{ index: 0, embedding: [0.2, 0.8, 0] }]
+}), { status: 200, headers: { 'content-type': 'application/json' } }));
+await sandbox.RPVectorMemory.retryQueue();
+assert.equal(sandbox.RPVectorMemory.stats().pending, 0);
+assert.equal(sandbox.RPVectorMemory.stats().encoding, 'int8:maxabs:v1');
 sandbox.RPStorage.savePreferences({ memoryModules: { vectorEnabled: false } });
 
 sandbox.RPCardContext = { name: '测试角色', personality: '稳定', scenario: '测试场景' };

@@ -33,7 +33,7 @@
 | 世界书预算 | 不单独裁剪命中条目 | 默认不裁剪，可由应用包启用字符预算 | 默认兼容，复杂卡可收紧 |
 | 模型写世界书 | 无卡内事务协议 | proposal、revision、证据、锁定条目 | 模板更强 |
 | 状态更新 | 原生变量更新模型，部分 JSON 合并 | schema、只读、枚举、范围、未知字段、事务 | 模板更严格 |
-| 向量记忆 | embedding、int8 量化、Top K、主动检索和向量模式历史裁剪 | 卡内 IndexedDB、embedding、Top K、关键词加权、历史裁剪和 `<tool_memory:…>` 主动检索 | RP-Hub 仍有量化和更成熟的任务队列，卡内隔离更强 |
+| 向量记忆 | embedding、int8 量化、Top K、主动检索和向量模式历史裁剪 | 卡内 IndexedDB、int8:maxabs:v1、Top K、关键词加权、历史裁剪、后台巡检、指数退避重试和 `<tool_memory:…>` 主动检索 | 量化与基础巡检语义已对齐；RP-Hub 的批量 UI 和并发调度仍更成熟 |
 | 总结记忆 | `classicModel` 逐轮总结，旧 AI 消息由摘要替换 | 默认关闭；开启后按逐轮目标总结，保留 user、以 classicMemory 替换旧 assistant，再注入最近楼层 | 语义已基本对齐，批量巡检/并发仍未复制 |
 | Prompt Regex | 请求前/显示后按脚本顺序处理 | 卡内 Regex Registry，区分 prompt/output、频道和深度，最终正文经过 output 阶段 | 卡内脚本可控；尚未复制全部宿主编辑器 |
 | 主动工具协议 | 向量、关键词、Tavily、结果回填和多轮续写 | 新增“工具”页；向量、关键词、联网三项可独立开关，最多自动续写4轮，结果用 `active_tool_results` 回填 | 协议形状对齐；联网需要宿主受控搜索桥 |
@@ -85,7 +85,6 @@ prelude
 
 ## 下一阶段优先级
 
-1. 向量 int8 压缩、后台任务队列和重试；
-2. 宿主受控的联网搜索桥；
-3. Command Registry；
-4. 首个 Galgame 或战棋应用包接入。
+1. 宿主受控的联网搜索桥；
+2. Command Registry；
+3. 首个 Galgame 或战棋应用包接入。

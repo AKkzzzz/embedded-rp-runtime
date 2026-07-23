@@ -252,6 +252,10 @@
       summaryEnabled: false,
       inheritRpHub: true,
       autoIndex: true,
+      patrolEnabled: true,
+      patrolIntervalMs: 60000,
+      retryEnabled: true,
+      maxRetryAttempts: 6,
       maxHistoryFloors: 40,
       topK: 10,
       similarityThreshold: 0.5,
@@ -267,27 +271,48 @@
       '向量和总结默认关闭；开启后继承 RP-Hub 当前已选择的 embedding/平衡模型，不另填 API。历史超过保留楼层后，Prompt 只带最近楼层，旧内容通过向量和总结召回。'
     ) +
       '<div class="card-grid"><article class="debug-card"><div class="metric"><span>结构化</span><strong>' + stats.structured + '</strong></div></article>' +
-      '<article class="debug-card"><div class="metric"><span>向量</span><strong>' + vectorStats.total + '</strong></div></article>' +
-      '<article class="debug-card"><div class="metric"><span>队列</span><strong>' + stats.queuePending + '</strong></div></article>' +
+      '<article class="debug-card"><div class="metric"><span>向量</span><strong>' + vectorStats.total + '</strong></div><p class="tiny">Int8 · 约 ' + vectorStats.estimatedBytes + ' bytes，未量化约 ' + vectorStats.float32EquivalentBytes + ' bytes</p></article>' +
+      '<article class="debug-card"><div class="metric"><span>重试队列</span><strong>' + vectorStats.pending + '</strong></div><p class="tiny">失败 ' + vectorStats.failed + ' · ' + (vectorStats.patrolRunning ? '巡检中' : '待机') + '</p></article>' +
       '<article class="debug-card wide"><div class="card-grid">' +
         '<label class="field"><span>向量召回</span><input type="checkbox" id="vectorEnabled" ' + (memorySettings.vectorEnabled ? 'checked' : '') + '><small>使用 RP-Hub embedding 模型建立卡内向量库</small></label>' +
         '<label class="field"><span>自动建立向量</span><input type="checkbox" id="autoIndex" ' + (memorySettings.autoIndex ? 'checked' : '') + '><small>回复完成后后台批量处理，不参与流式过程</small></label>' +
-        '<label class="field"><span>历史保留楼层</span><input id="maxHistoryFloors" type="number" min="0" max="200" value="' + Number(memorySettings.maxHistoryFloors) + '"><small>0 表示不裁剪；默认 50</small></label>' +
+        '<label class="field"><span>后台巡检</span><input type="checkbox" id="patrolEnabled" ' + (memorySettings.patrolEnabled ? 'checked' : '') + '><small>定期扫描已完成楼层，补齐漏掉的向量</small></label>' +
+        '<label class="field"><span>失败自动重试</span><input type="checkbox" id="retryEnabled" ' + (memorySettings.retryEnabled ? 'checked' : '') + '><small>接口失败后使用指数退避，最多重试指定次数</small></label>' +
+        '<label class="field"><span>巡检间隔（秒）</span><input id="patrolIntervalMs" type="number" min="15" max="3600" value="' + Math.round(Number(memorySettings.patrolIntervalMs || 60000) / 1000) + '"><small>默认60秒，最低15秒</small></label>' +
+        '<label class="field"><span>最大重试次数</span><input id="maxRetryAttempts" type="number" min="1" max="12" value="' + Number(memorySettings.maxRetryAttempts || 6) + '"><small>超过后进入失败队列，可手动重试</small></label>' +
+        '<label class="field"><span>历史保留楼层</span><input id="maxHistoryFloors" type="number" min="0" max="200" value="' + Number(memorySettings.maxHistoryFloors) + '"><small>0 表示不裁剪；默认 40</small></label>' +
         '<label class="field"><span>总结模块</span><input type="checkbox" id="summaryEnabled" ' + (memorySettings.summaryEnabled ? 'checked' : '') + '><small>使用总结 route 压缩旧历史，默认继承平衡模型</small></label>' +
         '<label class="field"><span>每隔多少楼总结</span><input id="summaryEveryFloors" type="number" min="2" max="100" value="' + Number(memorySettings.summaryEveryFloors) + '"><small>总结只在超过保留楼层后触发</small></label>' +
-      '</div><div class="control-line" style="margin-top:10px"><button id="saveMemorySettings" class="primary">保存记忆设置</button><span class="tiny" id="memorySettingsStatus">当前默认继承 RP-Hub</span></div></article>' +
+      '</div><div class="control-line" style="margin-top:10px"><button id="saveMemorySettings" class="primary">保存记忆设置</button><button id="runVectorPatrol" class="secondary">立即巡检</button><button id="retryVectorQueue" class="secondary">重试失败队列</button><span class="tiny" id="memorySettingsStatus">当前默认继承 RP-Hub</span></div></article>' +
       '<article class="debug-card wide"><div class="row-list">' + rows + '</div></article></div>';
     target.querySelector('#saveMemorySettings').onclick = function () {
       var next = Object.assign({}, memorySettings, {
         vectorEnabled: target.querySelector('#vectorEnabled').checked,
         autoIndex: target.querySelector('#autoIndex').checked,
         summaryEnabled: target.querySelector('#summaryEnabled').checked,
+        patrolEnabled: target.querySelector('#patrolEnabled').checked,
+        retryEnabled: target.querySelector('#retryEnabled').checked,
+        patrolIntervalMs: Math.max(15000, Math.min(3600000, (Number(target.querySelector('#patrolIntervalMs').value) || 60) * 1000)),
+        maxRetryAttempts: Math.max(1, Math.min(12, Number(target.querySelector('#maxRetryAttempts').value) || 6)),
         maxHistoryFloors: Math.max(0, Math.min(200, Number(target.querySelector('#maxHistoryFloors').value) || 0)),
         summaryEveryFloors: Math.max(2, Math.min(100, Number(target.querySelector('#summaryEveryFloors').value) || 10)),
         inheritRpHub: true
       });
       window.RPStorage.savePreferences({ memoryModules: next });
+      window.RPVectorMemory.restartPatrol();
       target.querySelector('#memorySettingsStatus').textContent = '已保存；向量模型和总结模型继承 RP-Hub';
+      renderMemory();
+    };
+    target.querySelector('#runVectorPatrol').onclick = async function () {
+      this.disabled = true;
+      await window.RPVectorMemory.patrol(true);
+      this.disabled = false;
+      renderMemory();
+    };
+    target.querySelector('#retryVectorQueue').onclick = async function () {
+      this.disabled = true;
+      await window.RPVectorMemory.retryQueue();
+      this.disabled = false;
       renderMemory();
     };
   }

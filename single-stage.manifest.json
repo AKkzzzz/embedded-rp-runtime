@@ -19,7 +19,12 @@
     "vectorTopK": 8,
     "similarityThreshold": 0.3,
     "chunkChars": 700,
-    "chunkOverlap": 100
+    "chunkOverlap": 100,
+    "storageEncoding": "int8:maxabs:v1",
+    "patrolEnabled": true,
+    "patrolIntervalMs": 60000,
+    "retryEnabled": true,
+    "maxRetryAttempts": 6
   },
   "models": {
     "routes": [
