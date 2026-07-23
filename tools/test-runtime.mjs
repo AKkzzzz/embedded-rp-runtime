@@ -73,10 +73,10 @@ const stateValidation = sandbox.RPStateGuard.validate(
 );
 assert.equal(stateValidation.ok, true);
 assert.equal(sandbox.RPPresets.list().length, 15);
-assert.equal(sandbox.RPPresets.byId('rphub-second-person').runtimeEnabled, true);
-assert.equal(sandbox.RPPresets.setEnabled('rphub-third-person', true), true);
-assert.equal(sandbox.RPPresets.byId('rphub-third-person').runtimeEnabled, true);
-assert.equal(sandbox.RPPresets.byId('rphub-second-person').runtimeEnabled, false);
+assert.equal(sandbox.RPPresets.byId('rphub-official-13').runtimeEnabled, true);
+assert.equal(sandbox.RPPresets.setEnabled('rphub-official-12', true), true);
+assert.equal(sandbox.RPPresets.byId('rphub-official-12').runtimeEnabled, true);
+assert.equal(sandbox.RPPresets.byId('rphub-official-13').runtimeEnabled, true);
 sandbox.RPPresets.reset();
 
 const importedPresets = sandbox.RPPresets.importRpHub([
@@ -116,12 +116,12 @@ sandbox.RPPresets.reset();
 
 const compiledPrompt = await sandbox.RPPrompt.compile('检查世界书递归扫描');
 assert.equal(JSON.stringify(compiledPrompt.messages.slice(0, 6).map(message => message.source)), JSON.stringify([
-  'preset:runtime-law',
-  'preset:runtime-response-envelope',
-  'preset:rphub-roleplay-default',
+  'preset:rphub-official-01',
   'worldbook:runtime-contract',
   'worldbook:example-regex-trigger',
-  'presets:system-support'
+  'presets:system-support',
+  'preset:rphub-official-02',
+  'preset:rphub-official-03'
 ]));
 
 const retrieval = sandbox.RPWorldbook.retrieve('请检查世界书递归扫描');
@@ -188,7 +188,7 @@ console.log(JSON.stringify({
   initialStateValid: true,
   presets: 15,
   presetImportExport: true,
-  exclusivePerspective: true,
+  officialDefaults: sandbox.RPPresets.list().slice(0, 15).every(preset => preset.builtin),
   promptOrder: compiledPrompt.messages.slice(0, 6).map(message => message.source),
   retrievalHits: retrieval.hits.map(hit => hit.id),
   committedRevision: committed.revision,

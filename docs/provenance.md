@@ -20,11 +20,11 @@
 
 ## RP-Hub 预设
 
-模板中的 `ui/data/rphub-presets.js` 包含基于 RP-Hub 默认预设整理和适配的文本，并在每个条目的 `source` 字段保留：
+模板中的 `sources/rphub-official-presets.json` 保存 RP-Hub 官方导出的完整默认预设快照，`ui/data/rphub-presets.js` 由同步脚本生成。每个条目的 `source` 字段保留：
 
 - 项目：`STA1N156/RP-Hub`；
 - 来源链接；
 - 许可证：`CC BY-NC 4.0`；
-- `adapted: true`。
+- `adapted: false`。
 
-这些预设延续非商业与署名要求。模板没有迁入 RP-Hub 的“色情内容增强”和“COT”默认预设。
+这些预设延续非商业与署名要求。提示词正文、角色和默认启停状态与官方快照逐项一致；模板只补充内部 ID、注入阶段、顺位和来源元数据。

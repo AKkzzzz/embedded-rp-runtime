@@ -122,10 +122,17 @@ for (const preset of templateData.presets) {
   if (!Number.isFinite(preset.order)) throw new Error(`invalid preset order: ${preset.id}`);
   if (!String(preset.content || '').trim()) throw new Error(`empty preset content: ${preset.id}`);
 }
-for (const forbiddenPreset of ['色情内容增强', 'COT']) {
-  if (templateData.presets.some(preset => preset.name === forbiddenPreset)) {
-    throw new Error(`forbidden default preset was bundled: ${forbiddenPreset}`);
-  }
+const officialPresets = JSON.parse(fs.readFileSync(path.join(root, 'sources', 'rphub-official-presets.json'), 'utf8'));
+const interoperableFields = preset => ({
+  name: preset.name,
+  role: preset.role,
+  content: preset.content,
+  enabled: preset.enabled
+});
+const bundledPresets = templateData.presets.map(interoperableFields);
+const officialDefaults = officialPresets.map(interoperableFields);
+if (JSON.stringify(bundledPresets) !== JSON.stringify(officialDefaults)) {
+  throw new Error('bundled defaults differ from the official RP-Hub preset snapshot');
 }
 
 console.log(JSON.stringify({

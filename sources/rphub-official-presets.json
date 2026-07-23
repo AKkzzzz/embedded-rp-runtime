@@ -1,15 +1,4 @@
-(function () {
-  'use strict';
-
-  var attribution = {
-    project: 'STA1N156/RP-Hub',
-    source: 'https://github.com/STA1N156/RP-Hub',
-    license: 'CC BY-NC 4.0',
-    adapted: false,
-    snapshot: 'sources/rphub-official-presets.json'
-  };
-
-  var officialPresets = [
+[
   {
     "name": "破限",
     "role": "system",
@@ -100,20 +89,4 @@
     "enabled": true,
     "role": "system"
   }
-];
-
-  window.RPTemplateData.presets = officialPresets.map(function (preset, index) {
-    var rootPreset = preset.role === 'system' && preset.name === '破限';
-    return {
-      id: 'rphub-official-' + String(index + 1).padStart(2, '0'),
-      name: preset.name,
-      role: preset.role,
-      phase: preset.role === 'system' ? (rootPreset ? 'system-root' : 'system-support') : 'prelude',
-      order: 1000 - index * 10,
-      enabled: preset.enabled !== false,
-      locked: false,
-      source: attribution,
-      content: preset.content
-    };
-  });
-})();
+]
