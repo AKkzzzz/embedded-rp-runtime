@@ -17,6 +17,8 @@ values.set('rp_hub_settings', JSON.stringify({
   balancedModel: 'official-balanced',
   fastModel: 'official-fast',
   uiTemplateModel: 'official-variable',
+  embeddingModel: 'official-embedding',
+  summaryModel: 'official-summary',
   temperature: 0.73,
   stream: true
 }));

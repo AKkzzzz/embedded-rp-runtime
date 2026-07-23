@@ -3,7 +3,9 @@
 
   var SETTINGS_DB = 'RPHubDB';
   var SETTINGS_KEY = 'rp_hub_settings';
+  var MEMORY_SETTINGS_KEY = 'rp_hub_memory_settings';
   var cachedSettings = null;
+  var cachedMemorySettings = null;
   var lastError = '';
   var detected = false;
 
@@ -91,7 +93,7 @@
     return null;
   }
 
-  function normalizeSettings(value) {
+  function normalizeSettings(value, memoryValue) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     var apiUrl = String(value.apiUrl || '').trim().replace(/\/+$/, '');
     var apiKey = String(value.apiKey || '').trim();
@@ -104,8 +106,8 @@
       balancedModel: String(value.balancedModel || '').trim(),
       fastModel: String(value.fastModel || '').trim(),
       uiTemplateModel: String(value.uiTemplateModel || '').trim(),
-      embeddingModel: String(value.embeddingModel || '').trim(),
-      summaryModel: String(value.summaryModel || value.summarizeModel || '').trim(),
+      embeddingModel: String(memoryValue && memoryValue.embeddingModel || value.embeddingModel || '').trim(),
+      summaryModel: String(memoryValue && memoryValue.classicModel || value.summaryModel || value.summarizeModel || '').trim(),
       temperature: Number.isFinite(Number(value.temperature)) ? Number(value.temperature) : 1,
       stream: value.stream !== false
     });
@@ -126,6 +128,7 @@
       temperature: cachedSettings.temperature,
       stream: cachedSettings.stream,
       hasApiKey: Boolean(cachedSettings.apiKey)
+      ,memoryMode: String(cachedMemorySettings && cachedMemorySettings.mode || '')
     };
   }
 
@@ -149,9 +152,14 @@
     lastError = '';
     var value = null;
     try {
-      value = await readIndexedDbKey(SETTINGS_DB, SETTINGS_KEY);
+      var stored = await Promise.all([
+        readIndexedDbKey(SETTINGS_DB, SETTINGS_KEY),
+        readIndexedDbKey(SETTINGS_DB, MEMORY_SETTINGS_KEY)
+      ]);
+      value = stored[0];
+      cachedMemorySettings = stored[1] && typeof stored[1] === 'object' ? clone(stored[1]) : null;
       if (!value) value = readLocalSettings();
-      cachedSettings = normalizeSettings(value);
+      cachedSettings = normalizeSettings(value, cachedMemorySettings);
       if (!cachedSettings) lastError = 'RP-Hub API 设置不存在或不完整';
     } catch (error) {
       cachedSettings = null;
@@ -188,8 +196,8 @@
       balanced: cachedSettings.balancedModel || cachedSettings.model,
       fast: cachedSettings.fastModel || cachedSettings.model,
       variable: cachedSettings.uiTemplateModel || cachedSettings.balancedModel || cachedSettings.model
-      ,embedding: cachedSettings.embeddingModel || cachedSettings.balancedModel || cachedSettings.model
-      ,summarize: cachedSettings.summaryModel || cachedSettings.balancedModel || cachedSettings.model
+      ,embedding: cachedSettings.embeddingModel
+      ,summarize: cachedSettings.summaryModel
     };
     return aliases[inherit] || cachedSettings.model || '';
   }

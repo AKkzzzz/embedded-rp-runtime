@@ -12,7 +12,7 @@
     return Object.assign({
       vectorEnabled: false,
       autoIndex: true,
-      maxHistoryFloors: 50,
+      maxHistoryFloors: 40,
       topK: 10,
       similarityThreshold: 0.5,
       maxVectors: 2000

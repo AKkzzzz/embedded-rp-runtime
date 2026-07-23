@@ -5,7 +5,7 @@
     return Object.assign({
       summaryEnabled: false,
       summaryEveryFloors: 10,
-      maxHistoryFloors: 50
+      maxHistoryFloors: 40
     }, window.RPStorage.getPreferences().memoryModules || {});
   }
 

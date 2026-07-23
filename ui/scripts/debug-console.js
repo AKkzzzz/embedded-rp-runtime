@@ -1,5 +1,6 @@
 (function () {
   'use strict';
+  var lastConfigCheck = null;
 
   function escapeHtml(value) {
     return String(value == null ? '' : value)
@@ -38,6 +39,11 @@
     var diagnostic = window.RPDiagnostics.snapshot();
     var worldbook = diagnostic.worldbook;
     var memory = diagnostic.memory;
+    var checkHtml = lastConfigCheck
+      ? '<article class="debug-card wide"><p class="eyebrow">CONFIG CHECK</p><h3>' +
+        escapeHtml(lastConfigCheck.ok ? 'RP-Hub 配置可以直接继承' : '配置仍需补全') +
+        '</h3><p class="muted">' + escapeHtml(lastConfigCheck.detail) + '</p></article>'
+      : '';
     var capabilityCount = Object.keys(diagnostic.host).filter(function (key) {
       return diagnostic.host[key] === true;
     }).length;
@@ -51,12 +57,24 @@
         '<article class="debug-card"><p class="eyebrow">WORLDBOOK</p><div class="metric"><span>启用条目</span><strong>' + worldbook.enabled + '/' + worldbook.total + '</strong></div><p class="tiny">递归和预算由卡内引擎处理</p></article>' +
         '<article class="debug-card"><p class="eyebrow">MEMORY</p><div class="metric"><span>向量覆盖率</span><strong>' + memory.vectorCoverage + '%</strong></div><p class="tiny">' + memory.structured + ' 条结构化记忆</p></article>' +
         '<article class="debug-card wide"><p class="eyebrow">STARTUP GATE</p><h3>Debug 后台 → 选择应用 → Renderer 接管</h3><p class="muted">底层服务不会因切换表现层而重建。Galgame、电子书和战棋共用相同的世界书、状态、记忆、模型路由与插件生命周期。</p></article>' +
+        checkHtml +
       '</div>';
     target.querySelector('#refreshRuntimeConfig').onclick = async function () {
       this.disabled = true;
       await window.RPHost.refresh();
       await window.RPModels.refreshModels();
       await window.RPVectorMemory.init();
+      var settings = window.RPHost.settings();
+      var memorySettings = window.RPStorage.getPreferences().memoryModules || {};
+      var missing = [];
+      if (!settings) missing.push('API 配置');
+      if (!window.RPHost.resolveModel('current')) missing.push('主模型');
+      if (memorySettings.vectorEnabled && !window.RPHost.resolveModel('embedding', window.RPModels.routes().embedding.model)) missing.push('向量模型');
+      if (memorySettings.summaryEnabled && !window.RPHost.resolveModel('summarize', window.RPModels.routes().summary.model)) missing.push('总结模型');
+      lastConfigCheck = {
+        ok: missing.length === 0 && window.RPModels.models().length > 0,
+        detail: missing.length ? '缺少：' + missing.join('、') : 'API、模型列表和当前启用模块的模型继承均正常。'
+      };
       this.disabled = false;
       renderAll();
     };
@@ -67,12 +85,18 @@
     var caps = window.RPHost.capabilities();
     var settings = window.RPHost.settings();
     var routes = window.RPModels.routes();
+    var availableModels = window.RPModels.models();
     var rows = Object.keys(routes).map(function (id) {
       var route = routes[id];
       var available = id === 'embedding' ? caps.embeddings : caps.generation;
       var resolved = window.RPHost.resolveModel(route.inherit, route.model);
+      var options = '<option value="">继承 RP-Hub' + (resolved ? '：' + escapeHtml(resolved) : '（未选择）') + '</option>' +
+        availableModels.map(function (model) {
+          var modelId = String(model.id || model.name || '');
+          return '<option value="' + escapeHtml(modelId) + '" ' + (route.model === modelId ? 'selected' : '') + '>' + escapeHtml(modelId) + '</option>';
+        }).join('');
       return '<div class="data-row"><div><strong>' + escapeHtml(route.label) + '</strong><div class="tiny">' + escapeHtml(id) + '</div></div>' +
-        '<div><code>' + escapeHtml(resolved || '未选择（继承：' + route.inherit + '）') + '</code><div class="tiny">' + (route.model ? '卡内覆盖' : '继承 RP-Hub') + '</div></div>' +
+        '<div><select data-model-route="' + escapeHtml(id) + '">' + options + '</select><div class="tiny">' + (route.model ? '卡内覆盖' : '继承 RP-Hub') + '</div></div>' +
         badge(available ? '直连可用' : '等待设置', available ? 'ok' : 'warn') + '</div>';
     }).join('');
     target.innerHTML = pageHead(
@@ -91,6 +115,12 @@
       this.disabled = false;
       renderModels();
     };
+    target.querySelectorAll('[data-model-route]').forEach(function (select) {
+      select.onchange = function () {
+        window.RPModels.setRoute(select.dataset.modelRoute, { model: select.value });
+        renderModels();
+      };
+    });
   }
 
   function triggerSummary(entry) {
@@ -222,7 +252,7 @@
       summaryEnabled: false,
       inheritRpHub: true,
       autoIndex: true,
-      maxHistoryFloors: 50,
+      maxHistoryFloors: 40,
       topK: 10,
       similarityThreshold: 0.5,
       summaryEveryFloors: 10,

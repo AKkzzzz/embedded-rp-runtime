@@ -50,13 +50,20 @@
       summaryEnabled: false,
       inheritRpHub: true,
       autoIndex: true,
-      maxHistoryFloors: 50,
+      maxHistoryFloors: 40,
       topK: 10,
       similarityThreshold: 0.5,
       summaryEveryFloors: 10,
       maxVectors: 2000
     }
   });
+  if (!preferences.memoryModules || !Object.prototype.hasOwnProperty.call(preferences.memoryModules, 'historyPolicyVersion')) {
+    preferences.memoryModules = Object.assign({}, preferences.memoryModules || {}, {
+      maxHistoryFloors: 40,
+      historyPolicyVersion: 2
+    });
+    try { localStorage.setItem(preferencesKey, JSON.stringify(preferences)); } catch (_error) {}
+  }
 
   function saveCanonical(next) {
     canonical = clone(next);
