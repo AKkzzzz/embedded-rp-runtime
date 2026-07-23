@@ -15,6 +15,8 @@
 - 支持流式输出、停止、继续、重新生成、编辑、删除和清空卡内楼层。
 - 可选开启卡内向量记忆和历史总结；默认继承 RP-Hub 的 embedding/平衡模型，向量只存卡自己的 IndexedDB。
 - 向量记忆使用 `int8:maxabs:v1` 存储，后台会巡检已完成楼层；embedding 失败时进入卡内重试队列并采用退避重试，不阻塞正文流式输出。
+- 可选的卡内能力插件已按 RP-Hub 体验重写：`runtime.timeline` 提供检查点/分支/回滚，`runtime.rpg-companion` 提供 RPG 状态上下文，`runtime.command-registry` 提供白名单命令，`runtime.variable-overlay` 提供不占舞台空间的浮球变量面板，`runtime.dynamic-lore` 提供状态型动态 Lore，`runtime.webllm` 提供宿主本地模型适配，`runtime.media-stage` 提供音频、视觉效果和 Live2D 能力探测。
+- 这些插件默认关闭，只有卡或用户显式启用才建立监听器和浮层；它们是本地安全适配器，不会原样执行 Tavern Helper、JS-Slash-Runner 或远程扩展脚本。
 
 ## 目标形态
 
@@ -45,3 +47,8 @@ http://127.0.0.1:8774/cards/内嵌RP运行时模板/ui/
 ## 安全边界
 
 模板只接受构建期打包的插件。卡内脚本只读取 RP-Hub 的同源模型设置，不能安装远程扩展、扫描父页面 DOM 或直接改写宿主全局世界书。模型写入世界书必须提交结构化补丁，经过 schema、权限和冲突检查后才可落盘。
+
+## 能力层说明
+
+插件清单位于 `ui/data/template-data.js` 与 `single-stage.manifest.json`，实现位于
+`ui/runtime/capability-plugins.js`。新卡只需要在自己的数据层启用相应插件；不要把外部插件的任意 JavaScript、网络请求或父页注入代码直接复制进卡。WebLLM、Live2D 和音频资源仍由卡自行提供本地资产或宿主桥接，未提供时只报告不可用，不影响纯文字玩法。

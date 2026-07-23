@@ -52,6 +52,14 @@
         callName: 'tool_web',
         enabled: false,
         resultCount: 5
+      },
+      {
+        id: 'tool_dice',
+        name: '随机骰子',
+        type: 'dice',
+        callName: 'tool_dice',
+        enabled: true,
+        resultCount: 1
       }
     ],
     presets: [],
@@ -136,6 +144,16 @@
         pendingProposals: []
       },
       flags: {}
+      ,
+      rpg: {
+        revision: 1,
+        player: {},
+        presentCharacters: [],
+        quests: [],
+        inventory: [],
+        stats: {},
+        scene: {}
+      }
     },
     stateSchema: {
       type: 'object',
@@ -234,9 +252,22 @@
           },
           required: ['revision', 'entries', 'pendingProposals']
         },
-        flags: { type: 'object', additionalProperties: true }
+        flags: { type: 'object', additionalProperties: true },
+        rpg: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            revision: { type: 'integer', minimum: 1, readOnly: true },
+            player: { type: 'object', additionalProperties: true },
+            presentCharacters: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            quests: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            inventory: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            stats: { type: 'object', additionalProperties: true },
+            scene: { type: 'object', additionalProperties: true }
+          },
+          required: ['revision', 'player', 'presentCharacters', 'quests', 'inventory', 'stats', 'scene']
+        }
       },
-      required: ['runtime', 'player', 'scene', 'conversation', 'knowledge', 'flags']
+      required: ['runtime', 'player', 'scene', 'conversation', 'knowledge', 'flags', 'rpg']
     },
     plugins: [
       {
@@ -258,6 +289,62 @@
         requires: [],
         optional: [],
         capabilities: ['worldbook:patch:validate']
+      },
+      {
+        id: 'runtime.timeline',
+        name: 'Timelines 时间线',
+        version: '0.1.0',
+        priority: 80,
+        enabled: false,
+        capabilities: ['events:listen', 'timeline:read', 'timeline:branch', 'storage:local']
+      },
+      {
+        id: 'runtime.rpg-companion',
+        name: 'RPG Companion 状态层',
+        version: '0.1.0',
+        priority: 90,
+        enabled: false,
+        capabilities: ['state:read', 'state:patch:propose', 'prompt:modify', 'ui:overlay', 'storage:local']
+      },
+      {
+        id: 'runtime.command-registry',
+        name: 'Tavern Helper 安全命令',
+        version: '0.1.0',
+        priority: 100,
+        enabled: false,
+        capabilities: ['commands:register', 'events:listen', 'state:read', 'ui:overlay']
+      },
+      {
+        id: 'runtime.variable-overlay',
+        name: 'Variable Viewer 浮层',
+        version: '0.1.0',
+        priority: 110,
+        enabled: false,
+        capabilities: ['ui:overlay', 'state:read', 'events:listen']
+      },
+      {
+        id: 'runtime.dynamic-lore',
+        name: 'Dynamic Lore 动态世界书',
+        version: '0.1.0',
+        priority: 120,
+        enabled: false,
+        capabilities: ['worldbook:read', 'retrieval:extend', 'prompt:modify']
+      },
+      {
+        id: 'runtime.webllm',
+        name: 'WebLLM 本地模型适配',
+        version: '0.1.0',
+        priority: 130,
+        enabled: false,
+        capabilities: ['webllm:local', 'storage:local']
+      },
+      {
+        id: 'runtime.media-stage',
+        name: 'Media Stage 音频与视觉',
+        version: '0.1.0',
+        priority: 140,
+        enabled: false,
+        capabilities: ['audio:play', 'visual:effect', 'assets:read', 'ui:overlay']
       }
     ],
     memory: {

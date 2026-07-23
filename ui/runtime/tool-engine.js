@@ -27,12 +27,44 @@
     });
   }
 
+  function randomInt(max) {
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      var bytes = new Uint32Array(1);
+      window.crypto.getRandomValues(bytes);
+      return (bytes[0] % max) + 1;
+    }
+    return Math.floor(Math.random() * max) + 1;
+  }
+
+  function rollDice(expression) {
+    var source = String(expression || '').trim().toLowerCase().replace(/\s+/g, '');
+    var modifier = 0;
+    var modifierMatch = source.match(/([+-]\d+)$/);
+    if (modifierMatch) {
+      modifier = Number(modifierMatch[1]);
+      source = source.slice(0, -modifierMatch[1].length);
+    }
+    var match = source.match(/^(\d*)d(\d+)$/);
+    if (!match) return { ok: false, error: '骰式格式应为 NdM、d20 或 NdM+修正' };
+    var count = Math.max(1, Math.min(100, Number(match[1] || 1)));
+    var sides = Math.max(2, Math.min(1000, Number(match[2])));
+    var rolls = [];
+    for (var i = 0; i < count; i += 1) rolls.push(randomInt(sides));
+    return { ok: true, expression: expression, rolls: rolls, modifier: modifier, total: rolls.reduce(function (sum, value) { return sum + value; }, modifier) };
+  }
+
   async function execute(call, context) {
     var tool = definition(call.name);
     if (!tool || !enabled(tool)) return { call: call, status: 'disabled', content: '该工具未启用。' };
     if (tool.type === 'vector_memory' && window.RPMemory) {
       var rows = await window.RPMemory.searchVectors(call.query, { topK: tool.resultCount || 5 });
       return { call: call, mode: /_cover$/i.test(call.name) ? 'cover' : 'add', status: 'ok', content: rows.map(function (row) { return row.sourceText || row.summary || ''; }).filter(Boolean).join('\n') || '没有找到相关向量记忆。' };
+    }
+    if (tool.type === 'dice') {
+      var result = rollDice(call.query);
+      return { call: call, mode: 'add', status: result.ok ? 'ok' : 'invalid', content: result.ok
+        ? '骰式 ' + result.expression + '：[' + result.rolls.join(', ') + '] ' + (result.modifier ? (result.modifier > 0 ? '+ ' : '- ') + Math.abs(result.modifier) + '，' : '') + '结果 = ' + result.total
+        : result.error };
     }
     if (tool.type === 'keyword_dialogue') {
       var messages = window.RPConversation ? window.RPConversation.list() : [];

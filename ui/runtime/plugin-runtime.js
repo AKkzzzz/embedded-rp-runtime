@@ -18,7 +18,16 @@
     'memory:read',
     'memory:write',
     'diagnostics:write',
-    'storage:local'
+    'storage:local',
+    'ui:overlay',
+    'timeline:read',
+    'timeline:branch',
+    'rpg:read',
+    'rpg:patch:propose',
+    'audio:play',
+    'visual:effect',
+    'webllm:local',
+    'assets:read'
   ]);
 
   function preference(id, fallback) {

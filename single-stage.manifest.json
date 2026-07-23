@@ -61,6 +61,12 @@
       "type": "web_search",
       "enabled": false,
       "capabilities": ["network:search"]
+    },
+    {
+      "id": "tool_dice",
+      "type": "dice",
+      "enabled": true,
+      "capabilities": ["randomness:local"]
     }
   ],
   "plugins": [
@@ -87,6 +93,69 @@
         "state:validate",
         "worldbook:patch:validate"
       ]
+    },
+    {
+      "id": "runtime.timeline",
+      "version": "0.1.0",
+      "enabled": false,
+      "priority": 80,
+      "requires": [],
+      "optional": [],
+      "capabilities": ["events:listen", "timeline:read", "timeline:branch", "storage:local"]
+    },
+    {
+      "id": "runtime.rpg-companion",
+      "version": "0.1.0",
+      "enabled": false,
+      "priority": 90,
+      "requires": [],
+      "optional": [],
+      "capabilities": ["state:read", "state:patch:propose", "prompt:modify", "ui:overlay", "storage:local"]
+    },
+    {
+      "id": "runtime.command-registry",
+      "version": "0.1.0",
+      "enabled": false,
+      "priority": 100,
+      "requires": [],
+      "optional": [],
+      "capabilities": ["commands:register", "events:listen", "state:read", "ui:overlay"]
+    },
+    {
+      "id": "runtime.variable-overlay",
+      "version": "0.1.0",
+      "enabled": false,
+      "priority": 110,
+      "requires": [],
+      "optional": [],
+      "capabilities": ["ui:overlay", "state:read", "events:listen"]
+    },
+    {
+      "id": "runtime.dynamic-lore",
+      "version": "0.1.0",
+      "enabled": false,
+      "priority": 120,
+      "requires": [],
+      "optional": [],
+      "capabilities": ["worldbook:read", "retrieval:extend", "prompt:modify"]
+    },
+    {
+      "id": "runtime.webllm",
+      "version": "0.1.0",
+      "enabled": false,
+      "priority": 130,
+      "requires": [],
+      "optional": [],
+      "capabilities": ["webllm:local", "storage:local"]
+    },
+    {
+      "id": "runtime.media-stage",
+      "version": "0.1.0",
+      "enabled": false,
+      "priority": 140,
+      "requires": [],
+      "optional": [],
+      "capabilities": ["audio:play", "visual:effect", "assets:read", "ui:overlay"]
     }
   ],
   "stage": {

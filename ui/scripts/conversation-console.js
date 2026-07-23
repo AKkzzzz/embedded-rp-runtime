@@ -71,6 +71,19 @@
       var text = input.value.trim();
       if (!text) return;
       input.value = '';
+      if (text.charAt(0) === '/' && window.RPCommands && window.RPPlugins.isEnabled('runtime.command-registry')) {
+        window.RPCommands.execute(text).then(function (result) {
+          if (result.handled) {
+            var output = typeof result.value === 'string' ? result.value : JSON.stringify(result.value, null, 2);
+            var target = document.getElementById('conversationError');
+            target.textContent = output;
+            target.hidden = false;
+            return;
+          }
+          window.RPConversation.send(text).catch(showError);
+        }).catch(showError);
+        return;
+      }
       window.RPConversation.send(text).catch(showError);
     };
     document.getElementById('stopGenerationButton').onclick = function () {
