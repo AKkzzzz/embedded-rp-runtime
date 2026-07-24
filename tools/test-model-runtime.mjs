@@ -77,6 +77,7 @@ load('ui/runtime/event-bus.js');
 load('ui/runtime/storage-engine.js');
 load('ui/runtime/host-bridge.js');
 sandbox.RPPlugins = { run: async (_hook, value) => value };
+load('ui/runtime/generation-monitor.js');
 load('ui/runtime/model-gateway.js');
 
 const caps = await sandbox.RPHost.detect();
@@ -115,6 +116,9 @@ const streamed = await sandbox.RPModels.generate('narrative', [{ role: 'user', c
 assert.equal(streamed.content, '你好');
 assert.equal(streamed.reasoning, '想');
 assert.deepEqual(deltas, ['你', '好']);
+assert.equal(sandbox.RPGenerationMonitor.snapshot().phase, 'complete');
+assert.equal(sandbox.RPGenerationMonitor.snapshot().reasoningChars, 1);
+assert.equal(sandbox.RPGenerationMonitor.snapshot().contentChars, 2);
 const payload = JSON.parse(requests.at(-1).options.body);
 assert.equal(payload.model, 'official-current');
 assert.equal(payload.temperature, 0.82);

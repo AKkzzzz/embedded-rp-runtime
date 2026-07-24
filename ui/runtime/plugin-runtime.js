@@ -65,6 +65,7 @@
       implementation: implementation || {},
       enabled: errors.length ? false : preference(manifest.id, manifest.enabled !== false),
       status: errors.length ? 'invalid' : (implementation ? 'ready' : 'unbound'),
+      active: false,
       errors: errors.map(function (message) { return { message: message, at: new Date().toISOString() }; }),
       calls: 0,
       totalMs: 0
@@ -144,15 +145,40 @@
     if (!enabled) {
       window.RPEvents.disposeOwner(id);
       if (typeof record.implementation.dispose === 'function') await record.implementation.dispose();
+      record.active = false;
     }
     record.enabled = enabled;
-    if (enabled && typeof record.implementation.activate === 'function') await record.implementation.activate();
+    if (enabled && !record.active && typeof record.implementation.activate === 'function') {
+      await record.implementation.activate();
+      record.active = true;
+    }
     var preferences = window.RPStorage.getPreferences();
     var next = Object.assign({}, preferences.pluginEnabled || {});
     next[id] = enabled;
     window.RPStorage.savePreferences({ pluginEnabled: next });
     window.RPEvents.emit('plugins:changed', { id: id, enabled: enabled });
     return true;
+  }
+
+  async function activateAll() {
+    var ordered = dependencyOrder();
+    for (var i = 0; i < ordered.length; i += 1) {
+      var record = ordered[i];
+      if (!record.enabled || record.active || record.status === 'invalid' || record.status === 'unbound') continue;
+      if (typeof record.implementation.activate !== 'function') {
+        record.active = true;
+        continue;
+      }
+      try {
+        await record.implementation.activate();
+        record.active = true;
+        record.status = 'ready';
+      } catch (error) {
+        record.status = 'error';
+        record.errors.push({ hook: 'activate', message: String(error.message || error), at: new Date().toISOString() });
+      }
+    }
+    return list();
   }
 
   function list() {
@@ -166,6 +192,7 @@
         optional: (record.manifest.optional || []).slice(),
         capabilities: (record.manifest.capabilities || []).slice(),
         enabled: record.enabled,
+        active: record.active,
         status: record.status,
         calls: record.calls,
         averageMs: record.calls ? Math.round(record.totalMs / record.calls * 100) / 100 : 0,
@@ -185,6 +212,7 @@
     call: call,
     run: run,
     list: list,
-    setEnabled: setEnabled
+    setEnabled: setEnabled,
+    activateAll: activateAll
   };
 })();

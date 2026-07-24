@@ -21,6 +21,10 @@
         calls: window.RPModels.diagnostics()
       },
       conversation: window.RPConversation.diagnostics(),
+      generation: window.RPGenerationMonitor ? {
+        current: window.RPGenerationMonitor.snapshot(),
+        recent: window.RPGenerationMonitor.recent()
+      } : null,
       presets: window.RPPresets.list(),
       plugins: window.RPPlugins.list(),
       memory: window.RPMemory.stats(),

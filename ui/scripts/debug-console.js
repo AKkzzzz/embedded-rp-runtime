@@ -80,6 +80,61 @@
     };
   }
 
+  function renderMonitor(actionOutput) {
+    var target = page('monitor');
+    if (!target) return;
+    var monitor = window.RPGenerationMonitor ? window.RPGenerationMonitor.snapshot() : {};
+    var prompt = window.RPPromptInspector ? window.RPPromptInspector.snapshot() : {};
+    var phaseLabels = { idle: '待机', starting: '请求已发送', thinking: '模型正在思考', writing: '模型正在输出正文', complete: '生成完成', stopped: '已停止', error: '生成错误' };
+    var pluginRows = [
+      ['提示词检查器', '悬浮球 / 诊断页', 'runtime.prompt-inspector'],
+      ['引导行动建议', '本页“生成行动建议”', 'runtime.guided-generations'],
+      ['角色长期记忆', '本页“提取角色记忆” / 记忆页', 'runtime.character-memory'],
+      ['便签', '悬浮球', 'runtime.notebook'],
+      ['时间线', '悬浮球 / 本页检查点', 'runtime.timeline'],
+      ['动态世界书', '世界书页待审提案', 'runtime.dynamic-lore'],
+      ['生图', '生图页', 'runtime.image-generation'],
+      ['命令与骰子', '游戏输入框 / 工具页', 'runtime.command-registry']
+    ].map(function (row) {
+      var enabled = window.RPPlugins.isEnabled(row[2]);
+      return '<div class="data-row"><div><strong>' + escapeHtml(row[0]) + '</strong><div class="tiny">' +
+        escapeHtml(row[2]) + '</div></div><div class="muted">' + escapeHtml(row[1]) + '</div>' +
+        badge(enabled ? '可用' : '关闭', enabled ? 'ok' : 'warn') + '</div>';
+    }).join('');
+    target.innerHTML = pageHead(
+      '实时生成与能力入口',
+      '悬浮球提供轻量实时监视；这里保留完整模型状态、宿主返回的 reasoning/thinking、正文流、提示词来源和调试动作。'
+    ) + '<div class="card-grid">' +
+      '<article class="debug-card"><p class="eyebrow">PHASE</p><h3>' + escapeHtml(phaseLabels[monitor.phase] || monitor.phase || '待机') + '</h3><p class="tiny">' + escapeHtml((monitor.route || '尚未请求') + (monitor.model ? ' · ' + monitor.model : '')) + '</p></article>' +
+      '<article class="debug-card"><div class="metric"><span>思考内容</span><strong>' + Number(monitor.reasoningChars || 0) + '</strong></div><p class="tiny">宿主 reasoning/thinking 字符</p></article>' +
+      '<article class="debug-card"><div class="metric"><span>正文输出</span><strong>' + Number(monitor.contentChars || 0) + '</strong></div><p class="tiny">当前请求累计字符</p></article>' +
+      '<article class="debug-card"><div class="metric"><span>提示词</span><strong>' + Number(prompt.charCount || 0) + '</strong></div><p class="tiny">世界书 ' + (prompt.worldbookHits || []).length + ' · 记忆 ' + (prompt.memoryHits || []).length + '</p></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">MODEL REASONING</p><pre>' + escapeHtml(monitor.reasoning || '当前模型尚未返回 reasoning/thinking 字段。') + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">STREAMED CONTENT</p><pre>' + escapeHtml(monitor.content || '当前还没有正文流。') + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">PROMPT SOURCES</p><pre>' + escapeHtml(JSON.stringify(window.RPPromptInspector ? window.RPPromptInspector.sources() : [], null, 2)) + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">CAPABILITY REACHABILITY</p><div class="row-list">' + pluginRows + '</div>' +
+        '<div class="control-line" style="margin-top:10px"><button id="debugSuggestions">生成行动建议</button><button id="debugCharacterMemory">提取并保存角色记忆</button><button id="debugCheckpoint">创建时间线检查点</button></div>' +
+        '<pre id="debugCapabilityOutput">' + escapeHtml(actionOutput || '这里的按钮会实际调用对应插件，用于确认能力不是“只注册、无入口”。') + '</pre></article></div>';
+    target.querySelector('#debugSuggestions').onclick = async function () {
+      this.disabled = true;
+      try { renderMonitor(JSON.stringify(await window.RPGuided.suggest(3), null, 2)); }
+      catch (error) { renderMonitor('行动建议失败：' + String(error.message || error)); }
+    };
+    target.querySelector('#debugCharacterMemory').onclick = async function () {
+      this.disabled = true;
+      try {
+        var rows = await window.RPCharMemory.extract();
+        var saved = rows.filter(function (row) { return row && row.character && row.summary; }).map(function (row) {
+          return window.RPCharMemory.add(row.character, row.summary, row.sourceIds, row.tags);
+        });
+        renderMonitor(JSON.stringify({ extracted: rows, saved: saved.length }, null, 2));
+      } catch (error) { renderMonitor('角色记忆提取失败：' + String(error.message || error)); }
+    };
+    target.querySelector('#debugCheckpoint').onclick = function () {
+      renderMonitor(JSON.stringify(window.RPTimeline.checkpoint('Debug 手动检查点'), null, 2));
+    };
+  }
+
   function renderModels() {
     var target = page('models');
     var caps = window.RPHost.capabilities();
@@ -226,7 +281,7 @@
     var target = page('plugins');
     var rows = window.RPPlugins.list().map(function (plugin) {
       return '<div class="data-row"><div><strong>' + escapeHtml(plugin.name) + '</strong><div class="tiny">' + escapeHtml(plugin.id + '@' + plugin.version) + '</div></div>' +
-        '<div><div class="tiny">' + escapeHtml(plugin.capabilities.join(' · ')) + '</div><div class="tiny">' + escapeHtml(plugin.status) + ' · 调用 ' + plugin.calls + ' · 平均 ' + plugin.averageMs + 'ms</div></div>' +
+        '<div><div class="tiny">' + escapeHtml(plugin.capabilities.join(' · ')) + '</div><div class="tiny">' + escapeHtml(plugin.status) + ' · ' + (plugin.active ? '已激活' : '未激活') + ' · 调用 ' + plugin.calls + ' · 平均 ' + plugin.averageMs + 'ms</div></div>' +
         '<button type="button" data-plugin-toggle="' + escapeHtml(plugin.id) + '">' + (plugin.enabled ? '启用' : '关闭') + '</button></div>';
     }).join('');
     target.innerHTML = pageHead(
@@ -408,6 +463,7 @@
 
   function renderAll() {
     renderOverview();
+    renderMonitor();
     renderModels();
     renderWorldbook();
     renderState();
@@ -422,6 +478,7 @@
   function renderPage(id) {
     var renderers = {
       overview: renderOverview,
+      monitor: renderMonitor,
       models: renderModels,
       worldbook: renderWorldbook,
       state: renderState,
@@ -451,4 +508,11 @@
     renderPage: renderPage,
     activate: activate
   };
+
+  if (window.RPGenerationMonitor) {
+    window.RPGenerationMonitor.subscribe(function () {
+      var active = document.querySelector('[data-debug-page="monitor"].active');
+      if (active) renderMonitor();
+    });
+  }
 })();

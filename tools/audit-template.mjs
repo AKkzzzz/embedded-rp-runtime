@@ -48,6 +48,7 @@ for (const needle of [
   'window.RPPlugins',
   'window.RPPrompt',
   'window.RPConversation',
+  'window.RPGenerationMonitor',
   'window.RPDiagnostics',
   'window.RPPresetManager'
 ]) {
@@ -83,6 +84,7 @@ const runtimeFiles = [
   'ui/runtime/preset-store.js',
   'ui/runtime/state-guard.js',
   'ui/runtime/host-bridge.js',
+  'ui/runtime/generation-monitor.js',
   'ui/runtime/model-gateway.js',
   'ui/runtime/plugin-runtime.js',
   'ui/runtime/vector-memory-engine.js',

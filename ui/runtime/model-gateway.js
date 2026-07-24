@@ -217,6 +217,13 @@
     };
     context = await window.RPPlugins.run('beforeRequest', context);
     var started = performance.now();
+    if (window.RPGenerationMonitor) {
+      window.RPGenerationMonitor.start({
+        route: routeId,
+        model: context.model,
+        stream: context.options.stream
+      });
+    }
     try {
       var response = await window.RPHost.apiFetch('chat/completions', {
         method: 'POST',
@@ -239,17 +246,25 @@
         throw apiError(response.status, detail);
       }
       var result = await readResponse(response, context.options.stream, {
-        onDelta: options.onDelta,
-        onReasoning: options.onReasoning
+        onDelta: function (delta, total) {
+          if (window.RPGenerationMonitor) window.RPGenerationMonitor.content(delta, total);
+          if (options.onDelta) options.onDelta(delta, total);
+        },
+        onReasoning: function (delta, total) {
+          if (window.RPGenerationMonitor) window.RPGenerationMonitor.reasoning(delta, total);
+          if (options.onReasoning) options.onReasoning(delta, total);
+        }
       });
       result.route = routeId;
       result.model = context.model;
       result.durationMs = Math.round(performance.now() - started);
       result = await window.RPPlugins.run('afterResponse', result);
       remember({ kind: 'generation', route: routeId, model: context.model, status: 'ok', durationMs: result.durationMs });
+      if (window.RPGenerationMonitor) window.RPGenerationMonitor.finish(result);
       return result;
     } catch (error) {
       remember({ kind: 'generation', route: routeId, model: context.model, status: error && error.name === 'AbortError' ? 'aborted' : 'error', detail: String(error.message || error) });
+      if (window.RPGenerationMonitor) window.RPGenerationMonitor.fail(error);
       throw error;
     }
   }

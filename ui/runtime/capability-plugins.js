@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var prefix = 'nanami_embedded_rp_runtime_v1:';
+  var prefix = window.RPTemplateData.app.storagePrefix + ':';
   function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function save(key, value) {
     try { localStorage.setItem(prefix + key, JSON.stringify(value)); } catch (_error) {}
@@ -100,34 +100,59 @@
     ball.id = 'rpCapabilityBall';
     ball.type = 'button';
     ball.textContent = '⌘';
-    ball.title = '卡内运行时工具';
-    ball.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147483000;width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:#18253b;color:#dce8ff;box-shadow:0 8px 28px rgba(0,0,0,.28);cursor:pointer;';
+    ball.title = '卡内运行时工具与模型生成监视';
+    ball.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147483000;min-width:42px;width:max-content;height:42px;padding:0 11px;border-radius:22px;border:1px solid rgba(255,255,255,.25);background:#18253b;color:#dce8ff;box-shadow:0 8px 28px rgba(0,0,0,.28);cursor:pointer;font:12px/1 system-ui;';
     var panel = document.createElement('aside');
     panel.id = 'rpCapabilityPanel';
     panel.hidden = true;
-    panel.style.cssText = 'position:fixed;right:14px;bottom:64px;z-index:2147482999;width:min(340px,calc(100vw - 28px));max-height:min(60vh,520px);overflow:auto;padding:14px;border:1px solid rgba(160,190,230,.35);border-radius:14px;background:rgba(12,20,34,.96);color:#e9f1ff;font:13px/1.5 system-ui;box-shadow:0 16px 40px rgba(0,0,0,.4);';
+    panel.style.cssText = 'position:fixed;right:14px;bottom:64px;z-index:2147482999;width:min(390px,calc(100vw - 28px));max-height:min(72vh,620px);overflow:auto;padding:14px;border:1px solid rgba(160,190,230,.35);border-radius:14px;background:rgba(12,20,34,.97);color:#e9f1ff;font:13px/1.5 system-ui;box-shadow:0 16px 40px rgba(0,0,0,.4);';
+    var activeView = 'live';
+    var lastMonitor = window.RPGenerationMonitor ? window.RPGenerationMonitor.snapshot() : null;
     function render() {
       var state = window.RPStorage.getCanonical();
-      panel.innerHTML = '<strong>运行时浮层</strong><p style="opacity:.75">不占主舞台空间，按需打开。</p>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">' +
-        (window.RPPlugins.isEnabled('runtime.prompt-inspector') ? '<button data-cap-view="prompt">本轮提示词</button>' : '') +
+      var monitor = lastMonitor || { phase: 'idle', reasoning: '', content: '', reasoningChars: 0, contentChars: 0, durationMs: 0 };
+      var prompt = window.RPPromptInspector ? window.RPPromptInspector.snapshot() : null;
+      var labels = { idle: '待机', starting: '请求中', thinking: '模型思考', writing: '生成正文', complete: '已完成', error: '出错', stopped: '已停止' };
+      var viewValue = activeView === 'thinking' ? monitor.reasoning :
+        activeView === 'content' ? monitor.content :
+        activeView === 'prompt' ? (prompt || {}) :
+        activeView === 'variables' ? state :
+        activeView === 'notes' ? (window.RPNotebook ? window.RPNotebook.list() : []) :
+        activeView === 'timeline' ? (window.RPTimeline ? window.RPTimeline.list() : []) :
+        monitor;
+      panel.innerHTML = '<strong>运行监视</strong><span style="float:right;opacity:.65">' + escapeHtml(labels[monitor.phase] || monitor.phase) + '</span>' +
+        '<p style="opacity:.75;margin:4px 0 8px">这里只显示宿主返回的 thinking/reasoning 字段和流式计数，不改变模型请求。</p>' +
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:8px 0">' +
+        '<div><small>思考</small><br><b>' + monitor.reasoningChars + '</b> 字</div>' +
+        '<div><small>正文</small><br><b>' + monitor.contentChars + '</b> 字</div>' +
+        '<div><small>耗时</small><br><b>' + (Math.round(Number(monitor.durationMs || 0) / 100) / 10) + '</b>s</div>' +
+        '<div><small>提示词</small><br><b>' + (prompt ? prompt.charCount || 0 : '—') + '</b> 字</div></div>' +
+        '<div style="font-size:11px;opacity:.7;margin-bottom:8px">' + escapeHtml((monitor.route || '未请求') + (monitor.model ? ' · ' + monitor.model : '') + (prompt ? ' · 世界书命中 ' + prompt.worldbookHits.length : '')) + '</div>' +
+        '<div style="display:flex;gap:5px;flex-wrap:wrap;margin:8px 0">' +
+        '<button data-cap-view="live">实时</button><button data-cap-view="thinking">思考</button><button data-cap-view="content">正文</button>' +
+        (window.RPPromptInspector ? '<button data-cap-view="prompt">提示词</button>' : '') +
+        '<button data-cap-view="variables">变量</button>' +
         (window.RPPlugins.isEnabled('runtime.notebook') ? '<button data-cap-view="notes">便签</button>' : '') +
         (window.RPPlugins.isEnabled('runtime.timeline') ? '<button data-cap-view="timeline">时间线</button>' : '') +
-        (window.RPPlugins.isEnabled('runtime.persona-switcher') ? '<button data-cap-view="persona">Persona</button>' : '') +
-        '</div><pre id="rpCapabilityOutput" style="white-space:pre-wrap;word-break:break-word">' +
-        escapeHtml(JSON.stringify({ player: state.player, scene: state.scene, rpg: state.rpg }, null, 2)) + '</pre>';
+        '</div><pre id="rpCapabilityOutput" style="max-height:330px;overflow:auto;white-space:pre-wrap;word-break:break-word">' +
+        escapeHtml(typeof viewValue === 'string' ? viewValue : JSON.stringify(viewValue, null, 2)) + '</pre>';
       panel.querySelectorAll('[data-cap-view]').forEach(function (button) {
         button.addEventListener('click', function () {
-          var value = {};
-          if (button.dataset.capView === 'prompt') value = window.RPPromptInspector.snapshot();
-          if (button.dataset.capView === 'notes') value = window.RPNotebook.list();
-          if (button.dataset.capView === 'timeline') value = window.RPTimeline.list();
-          if (button.dataset.capView === 'persona') value = window.RPPersonas.list();
-          panel.querySelector('#rpCapabilityOutput').textContent = JSON.stringify(value, null, 2);
+          activeView = button.dataset.capView;
+          render();
         });
       });
     }
     function escapeHtml(value) { return String(value).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+    function updateBall(monitor) {
+      lastMonitor = monitor;
+      var labels = { idle: '⌘', starting: '请求中', thinking: '思 ' + monitor.reasoningChars, writing: '写 ' + monitor.contentChars, complete: '✓ ' + monitor.contentChars, error: '!' };
+      ball.textContent = labels[monitor.phase] || '⌘';
+      ball.dataset.phase = monitor.phase;
+      ball.title = '运行监视：' + (monitor.phase || 'idle');
+      if (!panel.hidden) render();
+    }
+    if (window.RPGenerationMonitor) window.RPGenerationMonitor.subscribe(updateBall);
     ball.addEventListener('click', function () { panel.hidden = !panel.hidden; if (!panel.hidden) render(); });
     document.body.appendChild(ball); document.body.appendChild(panel);
     return ball;

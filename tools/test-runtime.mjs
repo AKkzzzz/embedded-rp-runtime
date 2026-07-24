@@ -325,6 +325,7 @@ assert.equal(typeof sandbox.RPPromptInspector.snapshot, 'function');
 assert.equal(typeof sandbox.RPGuided.suggest, 'function');
 assert.equal(typeof sandbox.RPCharMemory.add, 'function');
 assert.equal(typeof sandbox.RPNotebook.add, 'function');
+assert.equal(typeof sandbox.RPPlugins.activateAll, 'function');
 assert.equal(typeof sandbox.RPPersonas.activate, 'function');
 assert.equal(typeof sandbox.RPDiagrams.render, 'function');
 assert.equal(typeof sandbox.RPLoreCopilot.draft, 'function');

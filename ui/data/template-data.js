@@ -327,7 +327,7 @@
         name: 'Variable Viewer 浮层',
         version: '0.1.0',
         priority: 110,
-        enabled: false,
+        enabled: true,
         capabilities: ['ui:overlay', 'state:read', 'events:listen']
       },
       {

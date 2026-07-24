@@ -178,6 +178,17 @@ button.secondary {
   display: block;
 }
 
+#rpCapabilityBall[data-phase="thinking"],
+#rpCapabilityBall[data-phase="writing"] {
+  border-color: rgba(116, 212, 192, 0.85);
+  background: #163d3b;
+}
+
+#rpCapabilityBall[data-phase="error"] {
+  border-color: rgba(214, 112, 99, 0.9);
+  background: #4a2025;
+}
+
 .page-head {
   display: flex;
   align-items: flex-start;
