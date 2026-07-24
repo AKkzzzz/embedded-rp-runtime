@@ -305,14 +305,6 @@
         capabilities: ['worldbook:patch:validate']
       },
       {
-        id: 'runtime.timeline',
-        name: 'Timelines 时间线',
-        version: '0.1.0',
-        priority: 80,
-        enabled: false,
-        capabilities: ['events:listen', 'timeline:read', 'timeline:branch', 'storage:local']
-      },
-      {
         id: 'runtime.rpg-companion',
         name: 'RPG Companion 状态层',
         version: '0.1.0',

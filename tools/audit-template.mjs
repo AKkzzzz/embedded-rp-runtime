@@ -40,7 +40,20 @@ const inner = zlib.gunzipSync(Buffer.from(encoded, 'base64')).toString('utf8');
 const sourceContracts = [
   ['ui/runtime/prompt-compiler.js', ["source: 'state:variables'"], ["source: 'state:canonical'"]],
   ['ui/runtime/conversation-engine.js', ['generationEpoch', 'whenStateSettled', 'committed:'], []],
-  ['ui/runtime/tool-engine.js', ['function callKey', "status: 'duplicate'"], []]
+  ['ui/runtime/tool-engine.js', ['function callKey', "status: 'duplicate'"], []],
+  ['ui/runtime/vector-memory-engine.js', [
+    "window.RPTemplateData.app.storagePrefix + ':vectors:v1'",
+    'function archivedMessages',
+    'clearAll: clearAll'
+  ], ["var dbName = 'nanami_embedded_rp_vectors_v1'"]],
+  ['ui/runtime/ui-template-state.js', ['var lastTrace', 'trace: function'], []],
+  ['ui/runtime/capability-plugins.js', [
+    'function makeDraggable',
+    'data-cap-expand',
+    'function stateTrace'
+  ], ['window.RPTimeline', "attach('runtime.timeline'"]],
+  ['ui/runtime/storage-engine.js', ['function preferenceDefaults', 'ownedPrefix'], []],
+  ['ui/runtime/model-gateway.js', ['function embeddingModels', 'testEmbeddingModel'], []]
 ];
 for (const [relative, required, forbidden] of sourceContracts) {
   const source = fs.readFileSync(path.join(root, relative), 'utf8');
@@ -76,9 +89,16 @@ for (const needle of [
   'generationEpoch',
   'whenStateSettled',
   'function callKey',
-  "status: 'duplicate'"
+  "status: 'duplicate'",
+  "storagePrefix + ':vectors:v1'",
+  'function archivedMessages',
+  'function makeDraggable',
+  'testEmbeddingModel'
 ]) {
   if (!inner.includes(needle)) throw new Error(`packed runtime missing contract: ${needle}`);
+}
+for (const needle of ['runtime.timeline', 'window.RPTimeline', 'timeline:branch', 'timeline:read']) {
+  if (inner.includes(needle)) throw new Error(`packed runtime retained removed timeline contract: ${needle}`);
 }
 if (inner.includes("source: 'state:canonical'")) {
   throw new Error('packed runtime still injects full canonical state');

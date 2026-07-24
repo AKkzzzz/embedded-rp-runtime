@@ -20,8 +20,6 @@
     'diagnostics:write',
     'storage:local',
     'ui:overlay',
-    'timeline:read',
-    'timeline:branch',
     'rpg:read',
     'rpg:patch:propose',
     'audio:play',

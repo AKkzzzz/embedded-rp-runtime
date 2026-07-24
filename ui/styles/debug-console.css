@@ -178,6 +178,170 @@ button.secondary {
   display: block;
 }
 
+#rpCapabilityBall {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2147483646;
+  width: max-content;
+  min-width: 46px;
+  height: 46px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 24px;
+  background: #18253b;
+  color: #dce8ff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.36);
+  font: 12px/1 system-ui;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+#rpCapabilityBall:active {
+  cursor: grabbing;
+}
+
+#rpCapabilityBall.has-art {
+  width: 58px;
+  min-width: 58px;
+  height: 58px;
+  padding: 0;
+  overflow: visible;
+  border: 2px solid rgba(255, 255, 255, 0.78);
+  border-radius: 50%;
+  background-color: #eef5ec;
+  background-position: center;
+  background-size: cover;
+}
+
+#rpCapabilityBall.has-art::after {
+  content: attr(data-status-label);
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  min-width: 16px;
+  max-width: 54px;
+  padding: 3px 5px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  background: #18372a;
+  color: #f1fff6;
+  font: 9px/1 system-ui;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
+}
+
+#rpCapabilityBall.has-art[data-phase="idle"]::after {
+  display: none;
+}
+
+#rpCapabilityPanel {
+  position: fixed;
+  right: 14px;
+  bottom: 64px;
+  z-index: 2147483645;
+  width: min(720px, calc(100vw - 28px));
+  max-height: min(82dvh, 780px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid rgba(160, 190, 230, 0.4);
+  border-radius: 16px;
+  background: rgba(12, 20, 34, 0.985);
+  color: #e9f1ff;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.52);
+  font: 13px/1.55 system-ui;
+}
+
+#rpCapabilityPanel[data-expanded="true"] {
+  width: min(1080px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+}
+
+.rp-capability-head,
+.rp-capability-head > div,
+.rp-capability-window-actions,
+.rp-capability-tabs {
+  display: flex;
+  align-items: center;
+}
+
+.rp-capability-head {
+  justify-content: space-between;
+  gap: 12px;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.rp-capability-head > div,
+.rp-capability-window-actions,
+.rp-capability-tabs {
+  gap: 7px;
+}
+
+.rp-capability-window-actions,
+.rp-capability-window-actions button {
+  cursor: pointer;
+  touch-action: auto;
+}
+
+.rp-capability-head span,
+.rp-capability-summary {
+  color: rgba(233, 241, 255, 0.65);
+  font-size: 11px;
+}
+
+.rp-capability-window-actions button,
+.rp-capability-tabs button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: rgba(160, 190, 230, 0.28);
+  color: #cbd9eb;
+  font-size: 12px;
+}
+
+.rp-capability-tabs {
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.rp-capability-tabs button.active {
+  border-color: var(--cyan);
+  background: rgba(116, 212, 192, 0.15);
+  color: var(--ink);
+}
+
+.rp-capability-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.rp-capability-metrics > div {
+  padding: 8px 10px;
+  border: 1px solid rgba(160, 190, 230, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+#rpCapabilityOutput {
+  min-height: 220px;
+  max-height: min(56dvh, 560px);
+  margin: 10px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#rpCapabilityPanel[data-expanded="true"] #rpCapabilityOutput {
+  max-height: calc(100dvh - 300px);
+}
+
 #rpCapabilityBall[data-phase="thinking"],
 #rpCapabilityBall[data-phase="writing"] {
   border-color: rgba(116, 212, 192, 0.85);
@@ -187,6 +351,37 @@ button.secondary {
 #rpCapabilityBall[data-phase="error"] {
   border-color: rgba(214, 112, 99, 0.9);
   background: #4a2025;
+}
+
+@media (max-width: 640px) {
+  #rpCapabilityBall {
+    right: 10px;
+    bottom: 10px;
+  }
+
+  #rpCapabilityBall.has-art {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+  }
+
+  #rpCapabilityPanel,
+  #rpCapabilityPanel[data-expanded="true"] {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 12px;
+  }
+
+  .rp-capability-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #rpCapabilityOutput,
+  #rpCapabilityPanel[data-expanded="true"] #rpCapabilityOutput {
+    max-height: calc(100dvh - 340px);
+  }
 }
 
 .page-head {

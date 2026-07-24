@@ -93,7 +93,6 @@
       ['引导行动建议', '本页“生成行动建议”', 'runtime.guided-generations'],
       ['角色长期记忆', '本页“提取角色记忆” / 记忆页', 'runtime.character-memory'],
       ['便签', '悬浮球', 'runtime.notebook'],
-      ['时间线', '悬浮球 / 本页检查点', 'runtime.timeline'],
       ['动态世界书', '世界书页待审提案', 'runtime.dynamic-lore'],
       ['生图', '生图页', 'runtime.image-generation'],
       ['命令与骰子', '游戏输入框 / 工具页', 'runtime.command-registry']
@@ -119,7 +118,7 @@
       '<article class="debug-card wide"><p class="eyebrow">STATE MODEL PROMPT</p><pre>' + escapeHtml(JSON.stringify(stateTrace && stateTrace.prompt || [], null, 2)) + '</pre></article>' +
       '<article class="debug-card wide"><p class="eyebrow">STATE MODEL RESPONSE</p><pre>' + escapeHtml(stateTrace ? JSON.stringify(stateTrace, null, 2) : '状态副模型尚未运行。') + '</pre></article>' +
       '<article class="debug-card wide"><p class="eyebrow">CAPABILITY REACHABILITY</p><div class="row-list">' + pluginRows + '</div>' +
-        '<div class="control-line" style="margin-top:10px"><button id="debugSuggestions">生成行动建议</button><button id="debugCharacterMemory">提取并保存角色记忆</button><button id="debugCheckpoint">创建时间线检查点</button></div>' +
+        '<div class="control-line" style="margin-top:10px"><button id="debugSuggestions">生成行动建议</button><button id="debugCharacterMemory">提取并保存角色记忆</button></div>' +
         '<pre id="debugCapabilityOutput">' + escapeHtml(actionOutput || '这里的按钮会实际调用对应插件，用于确认能力不是“只注册、无入口”。') + '</pre></article></div>';
     target.querySelector('#debugSuggestions').onclick = async function () {
       this.disabled = true;
@@ -136,9 +135,6 @@
         renderMonitor(JSON.stringify({ extracted: rows, saved: saved.length }, null, 2));
       } catch (error) { renderMonitor('角色记忆提取失败：' + String(error.message || error)); }
     };
-    target.querySelector('#debugCheckpoint').onclick = function () {
-      renderMonitor(JSON.stringify(window.RPTimeline.checkpoint('Debug 手动检查点'), null, 2));
-    };
   }
 
   function renderModels() {
@@ -152,11 +148,17 @@
       var route = routes[id];
       var available = id === 'embedding' ? caps.embeddings : caps.generation;
       var resolved = window.RPHost.resolveModel(route.inherit, route.model);
+      var routeModels = id === 'embedding' && window.RPModels.embeddingModels
+        ? window.RPModels.embeddingModels()
+        : availableModels;
       var options = '<option value="">继承 RP-Hub' + (resolved ? '：' + escapeHtml(resolved) : '（未选择）') + '</option>' +
-        availableModels.map(function (model) {
+        routeModels.map(function (model) {
           var modelId = String(model.id || model.name || '');
           return '<option value="' + escapeHtml(modelId) + '" ' + (route.model === modelId ? 'selected' : '') + '>' + escapeHtml(modelId) + '</option>';
         }).join('');
+      if (id === 'embedding' && route.model && !routeModels.some(function (model) { return String(model.id || model.name || '') === route.model; })) {
+        options += '<option value="' + escapeHtml(route.model) + '" selected disabled>当前覆盖待验证：' + escapeHtml(route.model) + '</option>';
+      }
       return '<div class="data-row"><div><strong>' + escapeHtml(route.label) + '</strong><div class="tiny">' + escapeHtml(id) + '</div></div>' +
         '<div><select data-model-route="' + escapeHtml(id) + '">' + options + '</select><div class="tiny">' + (route.model ? '卡内覆盖' : '继承 RP-Hub') + '</div></div>' +
         badge(available ? '直连可用' : '等待设置', available ? 'ok' : 'warn') + '</div>';
@@ -195,9 +197,23 @@
       renderModels();
     };
     target.querySelectorAll('[data-model-route]').forEach(function (select) {
-      select.onchange = function () {
-        window.RPModels.setRoute(select.dataset.modelRoute, { model: select.value });
-        renderModels();
+      select.onchange = async function () {
+        var routeId = select.dataset.modelRoute;
+        if (routeId !== 'embedding' || !select.value) {
+          window.RPModels.setRoute(routeId, { model: select.value });
+          renderModels();
+          return;
+        }
+        select.disabled = true;
+        try {
+          await window.RPModels.testEmbeddingModel(select.value);
+          window.RPModels.setRoute(routeId, { model: select.value });
+          renderModels();
+        } catch (error) {
+          select.disabled = false;
+          await window.RPDialog.alert('该模型未通过向量接口校验，不会保存：\n' + String(error.message || error));
+          renderModels();
+        }
       };
     });
   }

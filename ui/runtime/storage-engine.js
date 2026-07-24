@@ -35,34 +35,38 @@
     return output;
   }
 
+  function preferenceDefaults() {
+    return {
+      activeDebugPage: 'overview',
+      worldbookDisabled: [],
+      pluginEnabled: {},
+      presetEnabled: {},
+      presetOrder: [],
+      presetCustom: [],
+      presetEdits: {},
+      modelRoutes: {},
+      toolEnabled: {},
+      reducedMotion: false,
+      memoryModules: {
+        vectorEnabled: false,
+        summaryEnabled: false,
+        inheritRpHub: true,
+        autoIndex: true,
+        patrolEnabled: true,
+        patrolIntervalMs: 60000,
+        retryEnabled: true,
+        maxRetryAttempts: 6,
+        maxHistoryFloors: 40,
+        topK: 10,
+        similarityThreshold: 0.5,
+        summaryEveryFloors: 10,
+        maxVectors: 2000
+      }
+    };
+  }
+
   var canonical = mergeDefaults(data.initialState, readJson(stateKey, data.initialState));
-  var preferences = readJson(preferencesKey, {
-    activeDebugPage: 'overview',
-    worldbookDisabled: [],
-    pluginEnabled: {},
-    presetEnabled: {},
-    presetOrder: [],
-    presetCustom: [],
-    presetEdits: {},
-    modelRoutes: {},
-    toolEnabled: {},
-    reducedMotion: false,
-    memoryModules: {
-      vectorEnabled: false,
-      summaryEnabled: false,
-      inheritRpHub: true,
-      autoIndex: true,
-      patrolEnabled: true,
-      patrolIntervalMs: 60000,
-      retryEnabled: true,
-      maxRetryAttempts: 6,
-      maxHistoryFloors: 40,
-      topK: 10,
-      similarityThreshold: 0.5,
-      summaryEveryFloors: 10,
-      maxVectors: 2000
-    }
-  });
+  var preferences = mergeDefaults(preferenceDefaults(), readJson(preferencesKey, preferenceDefaults()));
   if (!preferences.memoryModules || !Object.prototype.hasOwnProperty.call(preferences.memoryModules, 'historyPolicyVersion')) {
     preferences.memoryModules = Object.assign({}, preferences.memoryModules || {}, {
       maxHistoryFloors: 40,
@@ -106,10 +110,32 @@
     epoch: function () { return resetEpoch; },
     reset: function () {
       resetEpoch += 1;
-      localStorage.removeItem(stateKey);
-      localStorage.removeItem(preferencesKey);
+      var ownedPrefix = prefix + ':';
+      var ownedKeys = [];
+      if (typeof localStorage.key === 'function' && Number.isFinite(Number(localStorage.length))) {
+        for (var index = 0; index < localStorage.length; index += 1) {
+          var key = localStorage.key(index);
+          if (key && key.indexOf(ownedPrefix) === 0) ownedKeys.push(key);
+        }
+      }
+      if (!ownedKeys.length) {
+        // Keep the removed timeline key here so old template installs are fully reset.
+        ownedKeys = [stateKey, preferencesKey, prefix + ':timeline', prefix + ':vector-retry-queue', prefix + ':structured-memory'];
+      }
+      ownedKeys.forEach(function (key) { localStorage.removeItem(key); });
       canonical = clone(data.initialState);
-      preferences = {};
+      preferences = preferenceDefaults();
+      localStorage.setItem(stateKey, JSON.stringify(canonical));
+      localStorage.setItem(preferencesKey, JSON.stringify(preferences));
+      if (window.RPMemory && window.RPMemory.reset) window.RPMemory.reset();
+      if (window.RPVectorMemory && window.RPVectorMemory.clearAll) {
+        window.RPVectorMemory.clearAll().catch(function (error) {
+          window.RPEvents.emit('memory:vector:error', { message: String(error.message || error), source: 'storage-reset' });
+        });
+      }
+      window.RPEvents.emit('storage:canonical:changed', clone(canonical));
+      window.RPEvents.emit('storage:preferences:changed', clone(preferences));
+      return { cleared: ownedKeys.length, prefix: prefix, vectorClearScheduled: Boolean(window.RPVectorMemory && window.RPVectorMemory.clearAll) };
     }
   };
 })();

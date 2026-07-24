@@ -79,6 +79,17 @@
     };
   }
 
+  function reset() {
+    structured = authored.structured.slice();
+    vectors = authored.vectors.slice();
+    queue = [];
+    try {
+      localStorage.removeItem(window.RPTemplateData.app.storagePrefix + ':structured-memory');
+    } catch (_error) {}
+    window.RPEvents.emit('memory:structured:changed', { action: 'reset' });
+    return true;
+  }
+
   window.RPMemory = {
     listStructured: function () { return structured.map(function (item) { return Object.assign({}, item); }); },
     listVectors: function () { return vectors.map(function (item) { return Object.assign({}, item); }); },
@@ -89,6 +100,7 @@
       return window.RPVectorMemory ? window.RPVectorMemory.search(query, options) : Promise.resolve([]);
     },
     queue: function () { return queue.map(function (item) { return Object.assign({}, item); }); },
-    stats: stats
+    stats: stats,
+    reset: reset
   };
 })();

@@ -349,6 +349,7 @@ assert.equal(poolTool.calls[0].data.kind, 'success-pool');
 assert.equal(poolTool.calls[0].data.dice, 6);
 assert.match(poolTool.calls[0].content, /成功数 =/);
 assert.equal(typeof sandbox.RPUIStateSync.trace, 'function');
+assert.equal(typeof sandbox.RPMemory.reset, 'function');
 sandbox.RPTools.setEnabled('tool_worldbook', true);
 const worldbookTool = await sandbox.RPTools.run('<tool_worldbook:测试长期事实>');
 assert.equal(worldbookTool.calls.length, 1);

@@ -35,7 +35,9 @@ const responses = [];
 const localStorage = {
   getItem(key) { return values.has(key) ? values.get(key) : null; },
   setItem(key, value) { values.set(key, String(value)); },
-  removeItem(key) { values.delete(key); }
+  removeItem(key) { values.delete(key); },
+  key(index) { return Array.from(values.keys())[index] ?? null; },
+  get length() { return values.size; }
 };
 
 const sandbox = {
@@ -98,11 +100,12 @@ assert.equal(sandbox.RPHost.settings().generationParameters.maxCompletionTokens,
 assert.equal(sandbox.RPHost.settings().generationParameters.providerParameters.seed, 42);
 assert.equal(sandbox.RPHost.settings().generationParameters.providerParameters.api_token, undefined);
 
-responses.push(new Response(JSON.stringify({ data: [{ id: 'official-current' }, { id: 'second-model' }] }), {
+responses.push(new Response(JSON.stringify({ data: [{ id: 'official-current' }, { id: 'official-embedding' }] }), {
   status: 200,
   headers: { 'content-type': 'application/json' }
 }));
 assert.equal((await sandbox.RPModels.refreshModels()).length, 2);
+assert.deepEqual(sandbox.RPModels.embeddingModels().map(model => model.id), ['official-embedding']);
 assert.equal(requests.at(-1).url, 'https://example.invalid/v1/models');
 assert.equal(requests.at(-1).options.headers.Authorization, 'Bearer ' + secret);
 
@@ -162,21 +165,44 @@ responses.push(new Response(JSON.stringify({
   headers: { 'content-type': 'application/json' }
 }));
 assert.deepEqual(await sandbox.RPModels.embed(['历史内容']), [[1, 0, 0]]);
+responses.push(new Response(JSON.stringify({
+  data: [{ index: 0, embedding: [0, 1, 0, 0] }]
+}), {
+  status: 200,
+  headers: { 'content-type': 'application/json' }
+}));
+const embeddingProbe = await sandbox.RPModels.testEmbeddingModel('official-embedding');
+assert.equal(embeddingProbe.ok, true);
+assert.equal(embeddingProbe.model, 'official-embedding');
+assert.equal(embeddingProbe.dimensions, 4);
 load('ui/runtime/vector-memory-engine.js');
 const packedVector = sandbox.RPVectorMemory.quantize([1, -0.5, 0]);
 assert.equal(packedVector.embeddingEncoding, 'int8:maxabs:v1');
 assert.equal(packedVector.embeddingDims, 3);
 assert.deepEqual(Array.from(sandbox.RPVectorMemory.decode(packedVector.embeddingQ)), [127, -63, 0]);
 assert.equal(sandbox.RPVectorMemory.cosine([1, 0], new Int8Array([127, 0])), 1);
-sandbox.RPStorage.savePreferences({ memoryModules: { vectorEnabled: true, autoIndex: true, topK: 10, similarityThreshold: 0.5 } });
+sandbox.RPStorage.savePreferences({ memoryModules: {
+  vectorEnabled: true,
+  autoIndex: true,
+  maxHistoryFloors: 1,
+  topK: 10,
+  similarityThreshold: 0.5
+} });
 responses.push(new Response(JSON.stringify({ data: [
   { index: 0, embedding: [1, 0, 0] },
   { index: 1, embedding: [0.9, 0.1, 0] }
 ] }), { status: 200, headers: { 'content-type': 'application/json' } }));
 assert.equal((await sandbox.RPVectorMemory.indexMessages([
   { role: 'user', content: '旧港口的钟声' },
-  { role: 'assistant', content: '我们记住了旧港口。' }
+  { role: 'assistant', content: '我们记住了旧港口。' },
+  { role: 'user', content: '仍在眼前的新现场' },
+  { role: 'assistant', content: '这部分应保留为近期原文。' }
 ])).added, 2);
+assert.equal(sandbox.RPVectorMemory.stats().coldFloorThreshold, 1);
+assert.equal(sandbox.RPVectorMemory.archivedMessages([
+  { role: 'user', content: '旧' }, { role: 'assistant', content: '旧回复' },
+  { role: 'user', content: '新' }, { role: 'assistant', content: '新回复' }
+], 1).length, 2);
 responses.push(new Response(JSON.stringify({ data: [{ index: 0, embedding: [1, 0, 0] }] }), {
   status: 200, headers: { 'content-type': 'application/json' }
 }));
@@ -185,7 +211,12 @@ responses.push(new Response(JSON.stringify({ error: { message: 'temporary embedd
   status: 503, headers: { 'content-type': 'application/json' }
 }));
 const queuedVector = await sandbox.RPVectorMemory.indexMessages([
-  { role: 'user', content: '唯一的失败队列测试消息' }
+  { role: 'user', content: '旧港口的钟声' },
+  { role: 'assistant', content: '我们记住了旧港口。' },
+  { role: 'user', content: '唯一的失败队列测试消息' },
+  { role: 'assistant', content: '' },
+  { role: 'user', content: '仍在眼前的新现场' },
+  { role: 'assistant', content: '这部分应保留为近期原文。' }
 ]);
 assert.equal(queuedVector.queued, 1);
 assert.equal(sandbox.RPVectorMemory.stats().pending, 1);
@@ -195,6 +226,8 @@ responses.push(new Response(JSON.stringify({
 await sandbox.RPVectorMemory.retryQueue();
 assert.equal(sandbox.RPVectorMemory.stats().pending, 0);
 assert.equal(sandbox.RPVectorMemory.stats().encoding, 'int8:maxabs:v1');
+await sandbox.RPVectorMemory.clearAll();
+assert.equal(sandbox.RPVectorMemory.stats().total, 0);
 sandbox.RPStorage.savePreferences({ memoryModules: { vectorEnabled: false } });
 
 sandbox.RPCardContext = { name: '测试角色', personality: '稳定', scenario: '测试场景' };
@@ -262,6 +295,12 @@ assert.deepEqual(sandbox.RPConversation.list(), []);
 assert.deepEqual(sandbox.RPConversation.committed(), []);
 assert.deepEqual(sandbox.RPStorage.getCanonical().conversation.messages, []);
 await sandbox.RPConversation.whenStateSettled();
+values.set(sandbox.RPTemplateData.app.storagePrefix + ':debug-position', '{}');
+const resetResult = sandbox.RPStorage.reset();
+assert(resetResult.cleared >= 3);
+assert.equal(sandbox.RPStorage.getPreferences().memoryModules.maxHistoryFloors, 40);
+assert.equal(sandbox.RPStorage.getPreferences().memoryModules.vectorEnabled, false);
+assert.equal(values.has(sandbox.RPTemplateData.app.storagePrefix + ':debug-position'), false);
 
 const exported = JSON.stringify(sandbox.RPStorage.exportBundle());
 const diagnostics = JSON.stringify(sandbox.RPModels.diagnostics());
@@ -276,5 +315,7 @@ console.log(JSON.stringify({
   jsonFallback: jsonResult.content,
   conversationOperations: true,
   clearRaceGuard: true,
+  coldVectorHistory: true,
+  isolatedReset: true,
   secretLeak: false
 }, null, 2));

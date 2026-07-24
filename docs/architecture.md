@@ -95,6 +95,8 @@ localStorage 只保存小型偏好。长历史、向量和版本日志进入 Ind
 - 页面关闭后的安全恢复；
 - 不得在后台自主推进剧情。
 
+向量索引按卡的 `storagePrefix` 使用独立 IndexedDB，派生卡之间不共享向量数据。索引只接收超过 `maxHistoryFloors` 的完整用户/助手回合；近期原文继续由 Conversation Engine 直接送入 Prompt，避免同一内容同时以原文和向量召回重复注入。重置当前卡时同时清除本卡前缀下的偏好、队列、结构化记忆和向量库。
+
 ## 世界书与记忆不是同一系统
 
 ### Worldbook
@@ -165,3 +167,7 @@ localStorage 只保存小型偏好。长历史、向量和版本日志进入 Ind
 `RPHost.generationParameters()` 是唯一的宿主生成参数边界。`RPModels.generate()` 按“单次调用 > 模型 route > RP-Hub 宿主”的优先级合并参数；`max_completion_tokens` 与 `max_tokens` 同时存在时优先前者。显式 provider 扩展参数会过滤凭证类键与 `model/messages/temperature/stream` 等运行时保留键；设置界面只展示过滤后的公开快照。
 
 Prompt Compiler 使用 canonical `player.name` 解析 `{{user}}`，使用当前角色名解析 `{{char}}`。派生卡不读取宿主用户档案时，应在自身开局流程中写入 `player.name`。
+
+embedding 路由默认继承 RP-Hub 的记忆设置。卡内覆盖选择器只列出具有 embedding/向量特征的模型；保存覆盖前必须对 `/embeddings` 做一次小型能力探测并取得合法向量。模型名称筛选只负责减少误选，接口探测才是最终能力判断。
+
+RP-Hub UI Template 状态副模型由 `RPUIStateSync` 对齐：只读取已完成对话、只返回变量更新 JSON，并保留最近一次请求、响应、解析结果和变更列表作为只读调试轨迹。派生卡若实现更具体的 `RPStateSync.trace()`，悬浮 Debug 优先显示该轨迹，否则显示 `RPUIStateSync.trace()`。

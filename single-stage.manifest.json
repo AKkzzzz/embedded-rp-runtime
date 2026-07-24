@@ -109,15 +109,6 @@
       ]
     },
     {
-      "id": "runtime.timeline",
-      "version": "0.1.0",
-      "enabled": false,
-      "priority": 80,
-      "requires": [],
-      "optional": [],
-      "capabilities": ["events:listen", "timeline:read", "timeline:branch", "storage:local"]
-    },
-    {
       "id": "runtime.rpg-companion",
       "version": "0.1.0",
       "enabled": false,

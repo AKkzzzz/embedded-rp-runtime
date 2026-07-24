@@ -11,12 +11,14 @@
 - 流式模型调用、停止、继续、重生成、编辑、删除、清空楼层，以及清档竞态保护；
 - 可配置历史保留策略（当前模板默认 40 楼）、结构化总结和 Int8 向量记忆；
 - 后台向量巡检、失败重试队列和本地 IndexedDB 存储；
+- 按 `storagePrefix` 隔离的向量库，以及只索引保留楼层之外冷历史的入库策略；
 - 状态 schema、世界书补丁审批和版本冲突检查；
 - 插件生命周期、能力声明、依赖排序、启停和错误隔离；
-- 时间线、RPG 状态、白名单命令、变量浮层、动态 Lore、WebLLM 和媒体能力适配器；
+- RPG 状态、白名单命令、变量浮层、动态 Lore、WebLLM 和媒体能力适配器；
 - `d20`、`NdM`、修正值骰子工具与 `/roll` 命令；
 - 单轮工具调用去重，工具续写不能重复掷同一颗骰子或重复执行同一查询；
 - Debug 控制台、单舞台 renderer 入口和静态 JSON 构建出口。
+- 可拖动、可放大的悬浮 Debug，查看主模型/副模型 Prompt、响应、世界书命中和变量；
 
 刻意没有做成宿主替代品的部分：
 
@@ -70,8 +72,11 @@ RPConversation.whenStateSettled()
 - `RPMemory.searchStructured/searchVectors`
 - `RPSummary.contextHistory/summarize`
 - `RPVectorMemory.patrol/retryQueue/stats`
+- `RPVectorMemory.archivedMessages/clearAll`
+- `RPMemory.reset`
 
 卡内世界书是作者内容和模型提案的边界；向量和总结只是检索辅助，不得覆盖 canonical state。
+`RPStorage.reset()` 只清理当前卡 `storagePrefix` 下的数据，恢复模板完整默认偏好，并调用 `RPMemory.reset()` 与 `RPVectorMemory.clearAll()` 清理本卡长期记忆。
 
 ### 插件与事件
 
@@ -94,7 +99,6 @@ RPPlugins.setEnabled('my-plugin', false);
 |---|---|
 | `runtime.worldbook.recursion` | 世界书依赖递归 |
 | `runtime.patch.guard` | 模型补丁校验 |
-| `runtime.timeline` | 检查点、分支、回滚 |
 | `runtime.rpg-companion` | RPG 状态上下文 |
 | `runtime.command-registry` | 白名单命令 |
 | `runtime.variable-overlay` | 浮球变量查看器 |
@@ -188,11 +192,11 @@ window.RPStandalone = {
 };
 ```
 
-其中 `storage.export/import` 只处理 canonical、偏好、文本记忆和时间线；向量默认重建，避免把大型二进制索引塞进角色卡。
+其中 `storage.export/import` 只处理 canonical、偏好和文本记忆；向量默认重建，避免把大型二进制索引塞进角色卡。
 
 ## 后续开发顺序
 
-1. 为时间线、RPG Companion 和浮层补 UI，不改变现有底层 API。
+1. 为 RPG Companion 和浮层补 UI，不改变现有底层 API。
 2. 在现有普通骰与 D10 成功骰池基础上，为具体卡补优势/劣势、DC、暴击和 `[DICE_RESULT]` 展示层。
 3. 完成本地 WebLLM provider，而不是把大型模型包默认塞进卡。
 4. 接入卡自带音频、Live2D 和视觉资源。

@@ -65,6 +65,27 @@
     return output;
   }
 
+  function modelId(model) {
+    return String(model && (model.id || model.name) || model || '').trim();
+  }
+
+  function isEmbeddingModel(model) {
+    var capabilities = model && (model.capabilities || model.tasks || model.task);
+    var searchable = [
+      modelId(model),
+      model && model.type,
+      model && model.object,
+      model && model.purpose,
+      Array.isArray(capabilities) ? capabilities.join(' ') : capabilities
+    ].filter(Boolean).join(' ').toLowerCase();
+    return /(?:^|[\s_\-\/])(embed(?:ding)?s?|feature[\s_\-]?extraction|bge|gte|e5|mxbai|voyage)(?:$|[\s_\-\/\d])/.test(searchable) ||
+      /(?:jina|nomic|cohere)[\s_\-\/].*embed/.test(searchable);
+  }
+
+  function embeddingModels() {
+    return clone(models.filter(isEmbeddingModel));
+  }
+
   function remember(entry) {
     diagnostics.push(Object.assign({ at: new Date().toISOString() }, entry));
     diagnostics = diagnostics.slice(-50);
@@ -317,12 +338,10 @@
     }
   }
 
-  async function embed(inputs, options) {
+  async function requestEmbeddings(inputs, model, options) {
     options = options || {};
     var caps = window.RPHost.capabilities();
     if (!caps.generation) throw new Error(caps.lastError || 'RP-Hub API 设置不可用');
-    var route = routes().embedding;
-    var model = window.RPHost.resolveModel('embedding', route && route.model);
     if (!model) throw new Error('尚未选择向量嵌入模型');
     var values = (Array.isArray(inputs) ? inputs : [inputs]).map(function (value) {
       return String(value || '').trim();
@@ -352,6 +371,19 @@
     return vectors;
   }
 
+  async function embed(inputs, options) {
+    var route = routes().embedding;
+    var model = window.RPHost.resolveModel('embedding', route && route.model);
+    return requestEmbeddings(inputs, model, options || {});
+  }
+
+  async function testEmbeddingModel(model) {
+    var selected = String(model || '').trim();
+    if (!selected) throw new Error('请选择向量嵌入模型');
+    var vectors = await requestEmbeddings(['RP-Hub embedding capability probe'], selected, { monitor: false });
+    return { ok: true, model: selected, dimensions: vectors[0] ? vectors[0].length : 0 };
+  }
+
   function setRoute(id, patch) {
     if (!authoredRoutes[id]) return false;
     var preferences = window.RPStorage.getPreferences();
@@ -365,9 +397,12 @@
   window.RPModels = {
     routes: routes,
     models: function () { return clone(models); },
+    embeddingModels: embeddingModels,
+    isEmbeddingModel: isEmbeddingModel,
     refreshModels: refreshModels,
     generate: generate,
     embed: embed,
+    testEmbeddingModel: testEmbeddingModel,
     setRoute: setRoute,
     diagnostics: function () { return clone(diagnostics); },
     parseSseText: parseSseText,

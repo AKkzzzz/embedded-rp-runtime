@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var dbName = 'nanami_embedded_rp_vectors_v1';
+  var dbName = window.RPTemplateData.app.storagePrefix + ':vectors:v1';
   var storeName = 'vectors';
   var queueKey = window.RPTemplateData.app.storagePrefix + ':vector-retry-queue';
   var memory = [];
@@ -148,10 +148,18 @@
   }
 
   function queueStats() {
+    var latestError = '';
+    for (var index = queue.length - 1; index >= 0; index -= 1) {
+      if (queue[index] && queue[index].lastError) {
+        latestError = String(queue[index].lastError);
+        break;
+      }
+    }
     return {
       pending: queue.filter(function (task) { return task.status === 'pending'; }).length,
       failed: queue.filter(function (task) { return task.status === 'failed'; }).length,
-      total: queue.length
+      queueTotal: queue.length,
+      lastError: latestError
     };
   }
 
@@ -230,6 +238,23 @@
     });
   }
 
+  async function clearAll() {
+    memory = [];
+    queue = [];
+    saveQueue();
+    var db = await openDb();
+    if (!db) return true;
+    await new Promise(function (resolve) {
+      try {
+        var transaction = db.transaction(storeName, 'readwrite');
+        transaction.objectStore(storeName).clear();
+        transaction.oncomplete = resolve;
+        transaction.onerror = resolve;
+      } catch (_error) { resolve(); }
+    });
+    return true;
+  }
+
   function split(text, max) {
     var normalized = clean(text);
     if (!normalized) return [];
@@ -276,6 +301,25 @@
     return chunks;
   }
 
+  function completeTurns(messages) {
+    var turns = [];
+    for (var index = 0; index < (messages || []).length - 1; index += 1) {
+      if (messages[index] && messages[index].role === 'user' &&
+          messages[index + 1] && messages[index + 1].role === 'assistant') {
+        turns.push([messages[index], messages[index + 1]]);
+        index += 1;
+      }
+    }
+    return turns;
+  }
+
+  function archivedMessages(messages, keepFloors) {
+    var turns = completeTurns(messages);
+    var keep = Math.max(0, Number(keepFloors) || 0);
+    var archived = keep > 0 ? turns.slice(0, -keep) : turns;
+    return archived.reduce(function (output, turn) { return output.concat(turn); }, []);
+  }
+
   async function embedChunks(chunks, options) {
     if (!chunks.length) return { ok: true, added: 0, total: memory.length };
     var vectors = await window.RPModels.embed(chunks.map(function (item) { return item.sourceText; }), options || {});
@@ -294,8 +338,19 @@
     await load();
     var settings = prefs();
     if (!settings.vectorEnabled || settings.autoIndex === false) return { ok: false, skipped: true, added: 0 };
-    var chunks = buildChunks(messages);
-    if (!chunks.length) return { ok: true, added: 0, total: memory.length };
+    var floors = completeTurns(messages).length;
+    var keep = Math.max(0, Number(settings.maxHistoryFloors) || 0);
+    var chunks = buildChunks(archivedMessages(messages, keep));
+    if (!chunks.length) {
+      return {
+        ok: true,
+        added: 0,
+        total: memory.length,
+        conversationFloors: floors,
+        coldFloorThreshold: keep,
+        waitingForFloors: Math.max(0, keep + 1 - floors)
+      };
+    }
     try {
       return await embedChunks(chunks, options);
     } catch (error) {
@@ -382,9 +437,13 @@
     patrol: patrol,
     restartPatrol: function () { startPatrol(true); },
     retryQueue: function () { return processQueue(true); },
+    clearAll: clearAll,
     list: function () { return memory.map(publicItem); },
     queue: function () { return JSON.parse(JSON.stringify(queue)); },
     stats: function () {
+      var messages = window.RPConversation && window.RPConversation.list ? window.RPConversation.list() : [];
+      var floors = completeTurns(messages).length;
+      var keep = Math.max(0, Number(prefs().maxHistoryFloors) || 0);
       var dims = memory.reduce(function (sum, item) { return sum + Number(item.embeddingDims || item.embedding && item.embedding.length || 0); }, 0);
       var packedBytes = memory.reduce(function (sum, item) {
         return sum + (typeof item.embeddingQ === 'string' ? Math.ceil(item.embeddingQ.length * 0.75) : Number(item.embedding && item.embedding.byteLength || 0));
@@ -395,9 +454,15 @@
         encoding: 'int8:maxabs:v1',
         estimatedBytes: packedBytes,
         float32EquivalentBytes: dims * 4,
-        patrolRunning: patrolRunning
+        patrolRunning: patrolRunning,
+        conversationFloors: floors,
+        coldFloorThreshold: keep,
+        eligibleFloors: Math.max(0, floors - keep),
+        waitingForFloors: Math.max(0, keep + 1 - floors),
+        embeddingModel: (window.RPHost.settings() || {}).embeddingModel || ''
       }, queueStats());
     },
+    archivedMessages: archivedMessages,
     quantize: quantize,
     decode: base64ToInt8,
     cosine: cosine
