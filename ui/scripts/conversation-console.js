@@ -97,9 +97,9 @@
       clearError();
       window.RPConversation.regenerate().catch(showError);
     };
-    document.getElementById('clearConversationButton').onclick = function () {
+    document.getElementById('clearConversationButton').onclick = async function () {
       clearError();
-      if (confirm('清空卡内全部聊天历史？')) window.RPConversation.clear().catch(showError);
+      if (await window.RPDialog.confirm('清空卡内全部聊天历史？')) window.RPConversation.clear().catch(showError);
     };
     input.addEventListener('keydown', function (event) {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {

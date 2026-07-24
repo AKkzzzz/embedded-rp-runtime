@@ -9,6 +9,53 @@
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
 
+  function firstPresent(sources, keys) {
+    for (var sourceIndex = 0; sourceIndex < sources.length; sourceIndex += 1) {
+      var source = sources[sourceIndex];
+      if (!source || typeof source !== 'object') continue;
+      for (var keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+        var value = source[keys[keyIndex]];
+        if (value !== undefined && value !== null && value !== '') return value;
+      }
+    }
+    return null;
+  }
+
+  function requestParameters(route, options) {
+    var inherited = window.RPHost.generationParameters ? window.RPHost.generationParameters() : {};
+    var routeParameters = route.generationParameters || route.generation_parameters || {};
+    var optionParameters = options.generationParameters || options.generation_parameters || {};
+    var sources = [options, optionParameters, route, routeParameters, inherited];
+    var provider = Object.assign(
+      {},
+      inherited.providerParameters || {},
+      routeParameters.providerParameters || routeParameters.provider_parameters || {},
+      options.providerParameters || options.provider_parameters || {},
+      optionParameters.providerParameters || optionParameters.provider_parameters || {}
+    );
+    ['model', 'messages', 'temperature', 'stream', 'stream_options'].forEach(function (key) { delete provider[key]; });
+    var output = Object.assign({}, provider);
+    var topP = firstPresent(sources, ['topP', 'top_p']);
+    var maxTokens = firstPresent(sources, ['maxTokens', 'max_tokens']);
+    var maxCompletionTokens = firstPresent(sources, ['maxCompletionTokens', 'max_completion_tokens']);
+    var frequencyPenalty = firstPresent(sources, ['frequencyPenalty', 'frequency_penalty']);
+    var presencePenalty = firstPresent(sources, ['presencePenalty', 'presence_penalty']);
+    var stop = firstPresent(sources, ['stop', 'stopSequences', 'stop_sequences']);
+    var reasoningEffort = firstPresent(sources, ['reasoningEffort', 'reasoning_effort']);
+    if (topP !== null && Number.isFinite(Number(topP))) output.top_p = Number(topP);
+    if (maxCompletionTokens !== null && Number.isFinite(Number(maxCompletionTokens))) {
+      output.max_completion_tokens = Math.max(1, Math.floor(Number(maxCompletionTokens)));
+      delete output.max_tokens;
+    } else if (maxTokens !== null && Number.isFinite(Number(maxTokens))) {
+      output.max_tokens = Math.max(1, Math.floor(Number(maxTokens)));
+    }
+    if (frequencyPenalty !== null && Number.isFinite(Number(frequencyPenalty))) output.frequency_penalty = Number(frequencyPenalty);
+    if (presencePenalty !== null && Number.isFinite(Number(presencePenalty))) output.presence_penalty = Number(presencePenalty);
+    if (typeof stop === 'string' || Array.isArray(stop)) output.stop = clone(stop);
+    if (reasoningEffort !== null) output.reasoning_effort = String(reasoningEffort);
+    return output;
+  }
+
   function routes() {
     var overrides = window.RPStorage.getPreferences().modelRoutes || {};
     var output = {};
@@ -216,6 +263,7 @@
       })
     };
     context = await window.RPPlugins.run('beforeRequest', context);
+    var inheritedRequestParameters = requestParameters(route, context.options);
     var started = performance.now();
     if (window.RPGenerationMonitor && options.monitor !== false) {
       window.RPGenerationMonitor.start({
@@ -228,7 +276,7 @@
       var response = await window.RPHost.apiFetch('chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(Object.assign({}, inheritedRequestParameters, {
           model: context.model,
           messages: context.messages.map(function (message) {
             return { role: message.role, content: String(message.content || '') };
@@ -236,7 +284,7 @@
           temperature: context.options.temperature,
           stream: context.options.stream,
           ...(context.options.stream ? { stream_options: { include_usage: true } } : {})
-        }),
+        })),
         signal: options.signal
       });
       if (!response.ok) {

@@ -38,7 +38,7 @@
         }
       }, window.RPTemplateData.stateSchema);
       if (!result.ok) {
-        alert('启动状态未通过校验：\n' + result.errors.join('\n'));
+        await window.RPDialog.alert('启动状态未通过校验：\n' + result.errors.join('\n'));
         return;
       }
       window.RPStorage.saveCanonical(result.value);

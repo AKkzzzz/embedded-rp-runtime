@@ -81,6 +81,7 @@ const runtimeFiles = [
   'ui/data/template-data.js',
   'ui/data/rphub-presets.js',
   'ui/runtime/event-bus.js',
+  'ui/runtime/ui-dialog.js',
   'ui/runtime/storage-engine.js',
   'ui/runtime/preset-store.js',
   'ui/runtime/state-guard.js',

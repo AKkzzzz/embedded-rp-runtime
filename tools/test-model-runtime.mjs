@@ -20,7 +20,14 @@ values.set('rp_hub_settings', JSON.stringify({
   embeddingModel: 'official-embedding',
   summaryModel: 'official-summary',
   temperature: 0.73,
-  stream: true
+  stream: true,
+  top_p: 0.91,
+  max_completion_tokens: 4096,
+  frequency_penalty: 0.12,
+  presence_penalty: 0.23,
+  stop_sequences: ['<END>'],
+  reasoning_effort: 'high',
+  providerParameters: { seed: 42, service_tier: 'auto', api_token: 'must-be-filtered' }
 }));
 
 const requests = [];
@@ -86,6 +93,10 @@ assert.equal(sandbox.RPHost.settings().hasApiKey, true);
 assert.equal(JSON.stringify(sandbox.RPHost.settings()).includes(secret), false);
 assert.equal(sandbox.RPHost.resolveModel('quality'), 'official-quality');
 assert.equal(sandbox.RPHost.resolveModel('variable'), 'official-variable');
+assert.equal(sandbox.RPHost.settings().generationParameters.topP, 0.91);
+assert.equal(sandbox.RPHost.settings().generationParameters.maxCompletionTokens, 4096);
+assert.equal(sandbox.RPHost.settings().generationParameters.providerParameters.seed, 42);
+assert.equal(sandbox.RPHost.settings().generationParameters.providerParameters.api_token, undefined);
 
 responses.push(new Response(JSON.stringify({ data: [{ id: 'official-current' }, { id: 'second-model' }] }), {
   status: 200,
@@ -123,6 +134,16 @@ const payload = JSON.parse(requests.at(-1).options.body);
 assert.equal(payload.model, 'official-current');
 assert.equal(payload.temperature, 0.82);
 assert.equal(payload.stream, true);
+assert.equal(payload.top_p, 0.91);
+assert.equal(payload.max_completion_tokens, 4096);
+assert.equal(payload.max_tokens, undefined);
+assert.equal(payload.frequency_penalty, 0.12);
+assert.equal(payload.presence_penalty, 0.23);
+assert.deepEqual(payload.stop, ['<END>']);
+assert.equal(payload.reasoning_effort, 'high');
+assert.equal(payload.seed, 42);
+assert.equal(payload.service_tier, 'auto');
+assert.equal(payload.api_token, undefined);
 
 responses.push(new Response(JSON.stringify({
   choices: [{ message: { content: '非流式回复', reasoning: '内部推理' }, finish_reason: 'stop' }]
@@ -207,6 +228,8 @@ assert.equal(sandbox.RPConversation.list().length, 2);
 assert.equal(sandbox.RPConversation.list()[0].role, 'user');
 assert.equal(sandbox.RPConversation.list()[1].content, '第一段完成');
 assert.equal(sandbox.RPStorage.getCanonical().conversation.status, 'idle');
+assert.equal(sandbox.RPConversation.debugTrace().response, '第一段完成');
+assert.equal(sandbox.RPConversation.debugTrace().input, '开始测试');
 
 responses.push(new Response('data: {"choices":[{"message":{"content":"替代回复"}}]}\n\ndata: [DONE]\n', {
   status: 200,

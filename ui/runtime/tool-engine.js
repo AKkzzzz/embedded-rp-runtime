@@ -53,6 +53,36 @@
     return { ok: true, expression: expression, rolls: rolls, modifier: modifier, total: rolls.reduce(function (sum, value) { return sum + value; }, modifier) };
   }
 
+  function rollPool(expression) {
+    var source = String(expression || '').trim().toLowerCase().replace(/\s+/g, '');
+    var match = source.match(/^(?:pool|骰池|成功骰池)[:：]?(\d+)(?:d10)?$/i) || source.match(/^(\d+)d10(?:pool)?$/i);
+    if (!match) return { ok: false, error: '成功骰池格式应为 pool 6d10；8、9、10计成功，10会加骰。' };
+    var requested = Math.max(1, Math.min(40, Number(match[1] || 1)));
+    var pending = requested;
+    var rolls = [];
+    var successes = 0;
+    var exploded = 0;
+    while (pending > 0 && rolls.length < 120) {
+      pending -= 1;
+      var value = randomInt(10);
+      rolls.push(value);
+      if (value >= 8) successes += 1;
+      if (value === 10) {
+        pending += 1;
+        exploded += 1;
+      }
+    }
+    return {
+      ok: true,
+      expression: 'pool ' + requested + 'd10',
+      dice: requested,
+      rolls: rolls,
+      successes: successes,
+      exploded: exploded,
+      capped: rolls.length >= 120 && pending > 0
+    };
+  }
+
   async function execute(call, context) {
     var tool = definition(call.name);
     if (!tool || !enabled(tool)) return { call: call, status: 'disabled', content: '该工具未启用。' };
@@ -61,10 +91,14 @@
       return { call: call, mode: /_cover$/i.test(call.name) ? 'cover' : 'add', status: 'ok', content: rows.map(function (row) { return row.sourceText || row.summary || ''; }).filter(Boolean).join('\n') || '没有找到相关向量记忆。' };
     }
     if (tool.type === 'dice') {
-      var result = rollDice(call.query);
+      var isPool = /^(?:pool|骰池|成功骰池)|d10pool$/i.test(String(call.query || '').trim().replace(/\s+/g, ''));
+      var result = isPool ? rollPool(call.query) : rollDice(call.query);
       return { call: call, mode: 'add', status: result.ok ? 'ok' : 'invalid', content: result.ok
-        ? '骰式 ' + result.expression + '：[' + result.rolls.join(', ') + '] ' + (result.modifier ? (result.modifier > 0 ? '+ ' : '- ') + Math.abs(result.modifier) + '，' : '') + '结果 = ' + result.total
-        : result.error };
+        ? (isPool
+          ? '公开D10成功骰池 ' + result.dice + 'DP：[' + result.rolls.join(', ') + ']；成功数 = ' + result.successes +
+            '；10点加骰 = ' + result.exploded + (result.capped ? '；已触发安全上限' : '')
+          : '骰式 ' + result.expression + '：[' + result.rolls.join(', ') + '] ' + (result.modifier ? (result.modifier > 0 ? '+ ' : '- ') + Math.abs(result.modifier) + '，' : '') + '结果 = ' + result.total)
+        : result.error, data: result.ok ? Object.assign({ kind: isPool ? 'success-pool' : 'ordinary' }, result) : null };
     }
     if (tool.type === 'worldbook' && window.RPWorldbook) {
       var retrieval = window.RPWorldbook.retrieve(call.query, {
@@ -113,6 +147,8 @@
       window.RPStorage.savePreferences({ toolEnabled: next });
     },
     parse: parse,
+    rollDice: rollDice,
+    rollPool: rollPool,
     run: run,
     calls: function () { return JSON.parse(JSON.stringify(calls)); }
   };

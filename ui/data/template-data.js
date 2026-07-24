@@ -3,6 +3,7 @@
 
   window.RPTemplateData = {
     app: {
+      debugBallAsset: '',
       id: 'nanami-embedded-rp-runtime-template',
       name: '内嵌 RP 运行时模板',
       version: '0.1.0-debug',

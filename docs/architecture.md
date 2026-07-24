@@ -62,6 +62,11 @@ Key 只存在于设置适配器闭包；公共设置、诊断和存档都只能�
 
 route 只保存模型 ID 和参数，不保存 Key。配置可继承 RP-Hub 当前、质量、平衡、快速或变量模型，也可以在模板内覆盖模型 ID。
 
+主叙事和 UI Template 状态副模型分别保留最近一次只读调试轨迹：请求消息、真实响应、解析结果、工具调用与耗时。renderer 通过 `RPConversation.debugTrace()` 和 `RPUIStateSync.trace()` 读取；调试轨迹不进入下一轮提示词，也不参与状态裁定。
+
+骰子工具返回结构化结果。Conversation Engine 将真实工具结果写成
+`[DICE_RESULT|类型|骰式|骰点|结果|加骰次数|初始骰数]`，再继续同一轮生成。该事件由运行时拥有，模型不得自行伪造；具体卡的 renderer 可把它显示为骰面、跑团日志或战斗播报。
+
 ### Storage Engine
 
 需要区分三类状态：
@@ -148,3 +153,9 @@ localStorage 只保存小型偏好。长历史、向量和版本日志进入 Ind
 - Diagnostics：最近一次完整编译轨迹。
 
 “开始游戏”只选择 renderer 并发出 `runtime:start`。所有底层服务保持同一实例。
+
+## 生成参数继承
+
+`RPHost.generationParameters()` 是唯一的宿主生成参数边界。`RPModels.generate()` 按“单次调用 > 模型 route > RP-Hub 宿主”的优先级合并参数；`max_completion_tokens` 与 `max_tokens` 同时存在时优先前者。显式 provider 扩展参数会过滤凭证类键与 `model/messages/temperature/stream` 等运行时保留键；设置界面只展示过滤后的公开快照。
+
+Prompt Compiler 使用 canonical `player.name` 解析 `{{user}}`，使用当前角色名解析 `{{char}}`。派生卡不读取宿主用户档案时，应在自身开局流程中写入 `player.name`。

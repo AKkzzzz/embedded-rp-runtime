@@ -896,3 +896,29 @@ html.rp-visual-novel .conversation-log {
 html.rp-visual-novel .conversation-message {
   max-width: min(82ch, 92%);
 }
+.rp-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(1, 5, 6, .82);
+  backdrop-filter: blur(8px);
+}
+
+.rp-dialog {
+  display: grid;
+  gap: 18px;
+  width: min(420px, 100%);
+  padding: 22px;
+  border: 1px solid var(--line-bright);
+  border-radius: 12px;
+  background: #091315;
+  box-shadow: 0 24px 70px rgba(0,0,0,.65);
+}
+
+.rp-dialog-message { margin: 0; color: var(--ink); line-height: 1.6; white-space: pre-wrap; }
+.rp-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.rp-dialog-actions button { min-height: 38px; padding: 0 16px; }
+.rp-dialog-actions button.primary.danger { color: var(--red); border-color: rgba(220,111,103,.48); background: #351d1a; }

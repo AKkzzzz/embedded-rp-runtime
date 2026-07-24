@@ -14,6 +14,79 @@
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
 
+  function firstDefined(source, keys) {
+    source = source && typeof source === 'object' ? source : {};
+    for (var index = 0; index < keys.length; index += 1) {
+      if (source[keys[index]] !== undefined && source[keys[index]] !== null && source[keys[index]] !== '') {
+        return source[keys[index]];
+      }
+    }
+    return undefined;
+  }
+
+  function optionalNumber(source, keys) {
+    var value = firstDefined(source, keys);
+    if (value === undefined) return null;
+    var number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function safeProviderValue(value, depth) {
+    if (depth > 6 || value === undefined || typeof value === 'function') return undefined;
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+    if (Array.isArray(value)) {
+      return value.map(function (item) { return safeProviderValue(item, depth + 1); }).filter(function (item) {
+        return item !== undefined;
+      });
+    }
+    if (!value || typeof value !== 'object') return undefined;
+    var output = {};
+    Object.keys(value).forEach(function (key) {
+      if (/api.?key|token|secret|authorization|password|credential/i.test(key)) return;
+      if (/^(?:model|messages|temperature|stream|stream_options)$/i.test(key)) return;
+      var next = safeProviderValue(value[key], depth + 1);
+      if (next !== undefined) output[key] = next;
+    });
+    return output;
+  }
+
+  function generationParameters(value) {
+    var nested = firstDefined(value, ['generationParameters', 'generation_parameters']);
+    nested = nested && typeof nested === 'object' && !Array.isArray(nested) ? nested : {};
+    var sources = [value, nested];
+    function from(keys, parser) {
+      for (var index = 0; index < sources.length; index += 1) {
+        var result = parser ? parser(sources[index], keys) : firstDefined(sources[index], keys);
+        if (result !== undefined && result !== null) return result;
+      }
+      return null;
+    }
+    var stop = from(['stop', 'stopSequences', 'stop_sequences']);
+    if (stop != null && !Array.isArray(stop) && typeof stop !== 'string') stop = null;
+    if (Array.isArray(stop)) stop = stop.map(String).filter(Boolean).slice(0, 16);
+    var provider = {};
+    [
+      nested.providerParameters, nested.provider_parameters,
+      value.providerParameters, value.provider_parameters,
+      value.customParameters, value.custom_parameters,
+      value.extraBody, value.extra_body
+    ].forEach(function (candidate) {
+      var safe = safeProviderValue(candidate, 0);
+      if (safe && typeof safe === 'object' && !Array.isArray(safe)) Object.assign(provider, safe);
+    });
+    return {
+      topP: from(['topP', 'top_p'], optionalNumber),
+      maxTokens: from(['maxTokens', 'max_tokens'], optionalNumber),
+      maxCompletionTokens: from(['maxCompletionTokens', 'max_completion_tokens'], optionalNumber),
+      frequencyPenalty: from(['frequencyPenalty', 'frequency_penalty'], optionalNumber),
+      presencePenalty: from(['presencePenalty', 'presence_penalty'], optionalNumber),
+      stop: clone(stop),
+      reasoningEffort: from(['reasoningEffort', 'reasoning_effort']) || null,
+      providerParameters: provider
+    };
+  }
+
   function readIndexedDbKey(databaseName, key) {
     return new Promise(function (resolve) {
       if (typeof indexedDB === 'undefined') {
@@ -114,7 +187,8 @@
       imageSize: String(value.imageSize || '竖图'),
       imageGenCount: Math.max(1, Math.min(6, Number(value.imageGenCount) || 2)),
       temperature: Number.isFinite(Number(value.temperature)) ? Number(value.temperature) : 1,
-      stream: value.stream !== false
+      stream: value.stream !== false,
+      generationParameters: generationParameters(value)
     });
   }
 
@@ -132,6 +206,7 @@
       summaryModel: cachedSettings.summaryModel,
       temperature: cachedSettings.temperature,
       stream: cachedSettings.stream,
+      generationParameters: clone(cachedSettings.generationParameters),
       hasApiKey: Boolean(cachedSettings.apiKey)
       ,memoryMode: String(cachedMemorySettings && cachedMemorySettings.mode || '')
       ,imageStyle: cachedSettings.imageStyle,
@@ -212,6 +287,19 @@
     return aliases[inherit] || cachedSettings.model || '';
   }
 
+  function inheritedGenerationParameters() {
+    return clone(cachedSettings && cachedSettings.generationParameters || {
+      topP: null,
+      maxTokens: null,
+      maxCompletionTokens: null,
+      frequencyPenalty: null,
+      presencePenalty: null,
+      stop: null,
+      reasoningEffort: null,
+      providerParameters: {}
+    });
+  }
+
   function submitIntent(text) {
     var command = String(text || '').trim();
     if (!command) return false;
@@ -272,6 +360,7 @@
     endpoint: endpoint,
     apiFetch: apiFetch,
     resolveModel: resolveModel,
+    generationParameters: inheritedGenerationParameters,
     submitIntent: submitIntent,
     imageSettings: imageSettings,
     generateImage: generateImage

@@ -189,7 +189,7 @@ window.RPStandalone = {
 ## 后续开发顺序
 
 1. 为时间线、RPG Companion 和浮层补 UI，不改变现有底层 API。
-2. 为骰子增加优势/劣势、DC 检定、暴击和跑团日志。
+2. 在现有普通骰与 D10 成功骰池基础上，为具体卡补优势/劣势、DC、暴击和 `[DICE_RESULT]` 展示层。
 3. 完成本地 WebLLM provider，而不是把大型模型包默认塞进卡。
 4. 接入卡自带音频、Live2D 和视觉资源。
 5. 再实现独立 Host Adapter，验证单飞与 RP-Hub 的 Prompt 快照一致性。

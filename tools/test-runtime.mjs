@@ -120,8 +120,13 @@ assert.equal(editedPreset.ok, true);
 assert.equal(sandbox.RPPresets.byId(importedPresets.imported[0].id).name, '已编辑系统预设');
 sandbox.RPPresets.reset();
 
-const compiledPrompt = await sandbox.RPPrompt.compile('检查世界书递归扫描');
+const personalizedState = sandbox.RPStorage.getCanonical();
+personalizedState.player.name = '测试玩家';
+sandbox.RPStorage.saveCanonical(personalizedState);
+const compiledPrompt = await sandbox.RPPrompt.compile('{{user}}检查世界书递归扫描');
 assert(compiledPrompt.messages.some(message => message.content.includes('[Style Priority]')));
+assert(compiledPrompt.messages.some(message => message.content.includes('测试玩家检查世界书递归扫描')));
+assert(!compiledPrompt.messages.some(message => message.content.includes('{{user}}')));
 assert.equal(JSON.stringify(compiledPrompt.messages.slice(0, 6).map(message => message.source)), JSON.stringify([
   'preset:rphub-official-01',
   'worldbook:system-top:runtime-contract',
@@ -318,6 +323,13 @@ const diceTool = await sandbox.RPTools.run('<tool_dice:2d6+3>');
 assert.equal(diceTool.calls.length, 1);
 assert.equal(diceTool.calls[0].status, 'ok');
 assert.match(diceTool.calls[0].content, /结果 = \d+/);
+const poolTool = await sandbox.RPTools.run('<tool_dice:pool 6d10>');
+assert.equal(poolTool.calls.length, 1);
+assert.equal(poolTool.calls[0].status, 'ok');
+assert.equal(poolTool.calls[0].data.kind, 'success-pool');
+assert.equal(poolTool.calls[0].data.dice, 6);
+assert.match(poolTool.calls[0].content, /成功数 =/);
+assert.equal(typeof sandbox.RPUIStateSync.trace, 'function');
 sandbox.RPTools.setEnabled('tool_worldbook', true);
 const worldbookTool = await sandbox.RPTools.run('<tool_worldbook:测试长期事实>');
 assert.equal(worldbookTool.calls.length, 1);

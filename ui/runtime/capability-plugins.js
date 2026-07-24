@@ -99,9 +99,17 @@
     var ball = document.createElement('button');
     ball.id = 'rpCapabilityBall';
     ball.type = 'button';
-    ball.textContent = '⌘';
+    var ballArt = String(window.RPTemplateData && window.RPTemplateData.app && window.RPTemplateData.app.debugBallAsset || '');
+    ball.textContent = ballArt ? '' : '⌘';
     ball.title = '卡内运行时工具与模型生成监视';
     ball.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147483000;min-width:42px;width:max-content;height:42px;padding:0 11px;border-radius:22px;border:1px solid rgba(255,255,255,.25);background:#18253b;color:#dce8ff;box-shadow:0 8px 28px rgba(0,0,0,.28);cursor:pointer;font:12px/1 system-ui;';
+    if (ballArt && /^(?:\.{0,2}\/|\/|assets\/)/.test(ballArt)) {
+      ball.style.backgroundImage = 'url(' + JSON.stringify(ballArt) + ')';
+      ball.style.backgroundSize = 'cover';
+      ball.style.backgroundPosition = 'center';
+      ball.style.width = '58px';
+      ball.style.height = '58px';
+    }
     var panel = document.createElement('aside');
     panel.id = 'rpCapabilityPanel';
     panel.hidden = true;
@@ -112,10 +120,15 @@
       var state = window.RPStorage.getCanonical();
       var monitor = lastMonitor || { phase: 'idle', reasoning: '', content: '', reasoningChars: 0, contentChars: 0, durationMs: 0 };
       var prompt = window.RPPromptInspector ? window.RPPromptInspector.snapshot() : null;
+      var mainTrace = window.RPConversation && window.RPConversation.debugTrace ? window.RPConversation.debugTrace() : null;
+      var stateTrace = window.RPUIStateSync && window.RPUIStateSync.trace ? window.RPUIStateSync.trace() : null;
       var labels = { idle: '待机', starting: '请求中', thinking: '模型思考', writing: '生成正文', complete: '已完成', error: '出错', stopped: '已停止' };
       var viewValue = activeView === 'thinking' ? monitor.reasoning :
-        activeView === 'content' ? monitor.content :
-        activeView === 'prompt' ? (prompt || {}) :
+        activeView === 'content' ? (mainTrace && mainTrace.response || monitor.content) :
+        activeView === 'prompt' ? (mainTrace && mainTrace.prompt || prompt || {}) :
+        activeView === 'worldbook' ? (prompt ? prompt.worldbookHits : []) :
+        activeView === 'state-prompt' ? (stateTrace ? stateTrace.prompt : '状态副模型尚未运行。') :
+        activeView === 'state-response' ? (stateTrace || '状态副模型尚未运行。') :
         activeView === 'variables' ? state :
         activeView === 'notes' ? (window.RPNotebook ? window.RPNotebook.list() : []) :
         activeView === 'timeline' ? (window.RPTimeline ? window.RPTimeline.list() : []) :
@@ -129,8 +142,10 @@
         '<div><small>提示词</small><br><b>' + (prompt ? prompt.charCount || 0 : '—') + '</b> 字</div></div>' +
         '<div style="font-size:11px;opacity:.7;margin-bottom:8px">' + escapeHtml((monitor.route || '未请求') + (monitor.model ? ' · ' + monitor.model : '') + (prompt ? ' · 世界书命中 ' + prompt.worldbookHits.length : '')) + '</div>' +
         '<div style="display:flex;gap:5px;flex-wrap:wrap;margin:8px 0">' +
-        '<button data-cap-view="live">实时</button><button data-cap-view="thinking">思考</button><button data-cap-view="content">正文</button>' +
-        (window.RPPromptInspector ? '<button data-cap-view="prompt">提示词</button>' : '') +
+        '<button data-cap-view="live">实时</button><button data-cap-view="thinking">主模型思考</button><button data-cap-view="content">主模型响应</button>' +
+        (window.RPPromptInspector ? '<button data-cap-view="prompt">主模型提示词</button>' : '') +
+        (window.RPPromptInspector ? '<button data-cap-view="worldbook">世界书命中</button>' : '') +
+        (window.RPUIStateSync && window.RPUIStateSync.trace ? '<button data-cap-view="state-prompt">副模型提示词</button><button data-cap-view="state-response">副模型响应</button>' : '') +
         '<button data-cap-view="variables">变量</button>' +
         (window.RPPlugins.isEnabled('runtime.notebook') ? '<button data-cap-view="notes">便签</button>' : '') +
         (window.RPPlugins.isEnabled('runtime.timeline') ? '<button data-cap-view="timeline">时间线</button>' : '') +
@@ -147,7 +162,7 @@
     function updateBall(monitor) {
       lastMonitor = monitor;
       var labels = { idle: '⌘', starting: '请求中', thinking: '思 ' + monitor.reasoningChars, writing: '写 ' + monitor.contentChars, complete: '✓ ' + monitor.contentChars, error: '!' };
-      ball.textContent = labels[monitor.phase] || '⌘';
+      if (!ballArt) ball.textContent = labels[monitor.phase] || '⌘';
       ball.dataset.phase = monitor.phase;
       ball.title = '运行监视：' + (monitor.phase || 'idle');
       if (!panel.hidden) render();

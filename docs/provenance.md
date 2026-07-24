@@ -46,4 +46,4 @@
 
 ## RP-Hub 模型兼容层
 
-`ui/runtime/host-bridge.js` 与 `ui/runtime/model-gateway.js` 依据本地 RP-Hub `092ab90` 的设置持久化键、端点拼接和聊天请求形状重新实现。模板不复制 RP-Hub 的 Vue 应用代码；兼容层读取同源设置后只发送 `model`、`messages`、`temperature` 与 `stream`，并独立处理流式增量和原生 reasoning 字段。
+`ui/runtime/host-bridge.js` 与 `ui/runtime/model-gateway.js` 依据本地 RP-Hub `092ab90` 的设置持久化键、端点拼接和聊天请求形状重新实现。模板不复制 RP-Hub 的 Vue 应用代码；兼容层保留当前 RP-Hub 的 `model`、`messages`、`temperature` 与 `stream` 请求形状，并在同源设置明确提供时继承 `top_p`、token 上限、频率/存在惩罚、停止序列、`reasoning_effort` 及经过敏感键过滤的 provider 扩展参数。当前 RP-Hub 未存储的参数保持缺省，不伪造默认值。模板独立处理流式增量和原生 reasoning 字段。

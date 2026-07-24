@@ -4,6 +4,7 @@
   var active = null;
   var sequence = 0;
   var uiTemplateSyncPending = Promise.resolve();
+  var lastNarrativeTrace = null;
 
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -16,6 +17,23 @@
   function id(role) {
     sequence += 1;
     return role + '-' + Date.now().toString(36) + '-' + sequence.toString(36);
+  }
+
+  function markerField(value) {
+    return String(value == null ? '' : value).replace(/[|\]\r\n]/g, ' ').trim();
+  }
+
+  function diceMarker(result) {
+    var data = result && result.data;
+    if (!data || !Array.isArray(data.rolls)) return '';
+    return '[DICE_RESULT|' + [
+      markerField(data.kind || 'ordinary'),
+      markerField(data.expression || ''),
+      markerField(data.rolls.join(',')),
+      markerField(data.kind === 'success-pool' ? data.successes : data.total),
+      markerField(data.exploded || 0),
+      markerField(data.dice || data.rolls.length)
+    ].join('|') + ']';
   }
 
   function canonicalConversation() {
@@ -67,6 +85,16 @@
       status: 'complete'
     };
     active = { controller: controller, draft: draft, mode: options.mode || 'send' };
+    lastNarrativeTrace = {
+      startedAt: now(),
+      mode: options.mode || 'send',
+      input: String(input || ''),
+      prompt: null,
+      toolResults: [],
+      response: '',
+      reasoning: '',
+      error: ''
+    };
     persist(baseMessages, 'generating');
     await changed('generation-start');
     try {
@@ -80,6 +108,7 @@
         history: history(promptHistory),
         character: window.RPCardContext || null
       });
+      lastNarrativeTrace.prompt = clone(compiled);
       var requestMessages = compiled.messages.slice();
       var result = await window.RPModels.generate('narrative', requestMessages, {
         signal: controller.signal,
@@ -99,9 +128,12 @@
       while (window.RPTools && toolRounds < 4) {
         var toolResult = await window.RPTools.run(toolSource, { messages: baseMessages });
         if (!toolResult.calls.length) break;
+        lastNarrativeTrace.toolResults = lastNarrativeTrace.toolResults.concat(clone(toolResult.calls));
         toolRounds += 1;
         requestMessages.push({ role: 'assistant', content: draft.content, source: 'tool:request' });
         requestMessages.push({ role: 'user', content: toolResult.prompt, source: 'tool:result' });
+        var diceMarkers = toolResult.calls.map(diceMarker).filter(Boolean);
+        if (diceMarkers.length) draft.content += '\n\n' + diceMarkers.join('\n') + '\n\n';
         var beforeToolContinuation = draft.content.length;
         var continuation = await window.RPModels.generate('narrative', requestMessages, {
           signal: controller.signal,
@@ -136,6 +168,9 @@
       } else {
         finalMessages.push(clone(draft));
       }
+      lastNarrativeTrace.response = draft.content;
+      lastNarrativeTrace.reasoning = draft.reasoning;
+      lastNarrativeTrace.completedAt = now();
       active = null;
       persist(finalMessages, 'idle');
       if (window.RPUIStateSync) {
@@ -165,6 +200,12 @@
         failedMessages.push(clone(draft));
       }
       active = null;
+      if (lastNarrativeTrace) {
+        lastNarrativeTrace.response = draft.content;
+        lastNarrativeTrace.reasoning = draft.reasoning;
+        lastNarrativeTrace.error = String(error && error.message || error);
+        lastNarrativeTrace.completedAt = now();
+      }
       persist(failedMessages, 'idle');
       await changed(interrupted ? 'generation-stopped' : 'generation-error');
       if (!interrupted) throw error;
@@ -265,6 +306,7 @@
     edit: edit,
     remove: remove,
     clear: clear,
+    debugTrace: function () { return clone(lastNarrativeTrace); },
     diagnostics: function () {
       var conversation = canonicalConversation();
       return {

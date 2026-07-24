@@ -9,6 +9,15 @@
     return '【' + hit.name + '】\n' + hit.content;
   }
 
+  function resolvePlaceholders(content, state, character) {
+    var playerName = state && state.player && String(state.player.name || '').trim();
+    var characterName = character && String(character.name || '').trim();
+    var output = String(content == null ? '' : content);
+    if (playerName && playerName !== '{{user}}') output = output.replace(/\{\{user\}\}/gi, playerName);
+    if (characterName && characterName !== '{{char}}') output = output.replace(/\{\{char\}\}/gi, characterName);
+    return output;
+  }
+
   function groupHits(hits) {
     var groups = {
       system_top: [],
@@ -202,6 +211,11 @@
       });
     }
 
+    messages = messages.map(function (message) {
+      return Object.assign({}, message, {
+        content: resolvePlaceholders(message.content, options.state, options.character)
+      });
+    });
     var context = { input: input, messages: messages, retrieval: retrieval, memories: memories };
     context = await window.RPPlugins.run('beforePromptCompile', context);
     if (window.RPRegex) context.messages = window.RPRegex.applyPrompt(context.messages);

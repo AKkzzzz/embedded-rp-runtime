@@ -85,6 +85,8 @@
     if (!target) return;
     var monitor = window.RPGenerationMonitor ? window.RPGenerationMonitor.snapshot() : {};
     var prompt = window.RPPromptInspector ? window.RPPromptInspector.snapshot() : {};
+    var mainTrace = window.RPConversation && window.RPConversation.debugTrace ? window.RPConversation.debugTrace() : null;
+    var stateTrace = window.RPUIStateSync && window.RPUIStateSync.trace ? window.RPUIStateSync.trace() : null;
     var phaseLabels = { idle: '待机', starting: '请求已发送', thinking: '模型正在思考', writing: '模型正在输出正文', complete: '生成完成', stopped: '已停止', error: '生成错误' };
     var pluginRows = [
       ['提示词检查器', '悬浮球 / 诊断页', 'runtime.prompt-inspector'],
@@ -109,9 +111,13 @@
       '<article class="debug-card"><div class="metric"><span>思考内容</span><strong>' + Number(monitor.reasoningChars || 0) + '</strong></div><p class="tiny">宿主 reasoning/thinking 字符</p></article>' +
       '<article class="debug-card"><div class="metric"><span>正文输出</span><strong>' + Number(monitor.contentChars || 0) + '</strong></div><p class="tiny">当前请求累计字符</p></article>' +
       '<article class="debug-card"><div class="metric"><span>提示词</span><strong>' + Number(prompt.charCount || 0) + '</strong></div><p class="tiny">世界书 ' + (prompt.worldbookHits || []).length + ' · 记忆 ' + (prompt.memoryHits || []).length + '</p></article>' +
-      '<article class="debug-card wide"><p class="eyebrow">MODEL REASONING</p><pre>' + escapeHtml(monitor.reasoning || '当前模型尚未返回 reasoning/thinking 字段。') + '</pre></article>' +
-      '<article class="debug-card wide"><p class="eyebrow">STREAMED CONTENT</p><pre>' + escapeHtml(monitor.content || '当前还没有正文流。') + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">MAIN MODEL REASONING</p><pre>' + escapeHtml(mainTrace && mainTrace.reasoning || monitor.reasoning || '当前模型尚未返回 reasoning/thinking 字段。') + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">MAIN MODEL RESPONSE</p><pre>' + escapeHtml(mainTrace && mainTrace.response || monitor.content || '当前还没有正文流。') + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">MAIN MODEL PROMPT</p><pre>' + escapeHtml(JSON.stringify(mainTrace && mainTrace.prompt || prompt || {}, null, 2)) + '</pre></article>' +
       '<article class="debug-card wide"><p class="eyebrow">PROMPT SOURCES</p><pre>' + escapeHtml(JSON.stringify(window.RPPromptInspector ? window.RPPromptInspector.sources() : [], null, 2)) + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">WORLDBOOK HITS</p><pre>' + escapeHtml(JSON.stringify(prompt.worldbookHits || [], null, 2)) + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">STATE MODEL PROMPT</p><pre>' + escapeHtml(JSON.stringify(stateTrace && stateTrace.prompt || [], null, 2)) + '</pre></article>' +
+      '<article class="debug-card wide"><p class="eyebrow">STATE MODEL RESPONSE</p><pre>' + escapeHtml(stateTrace ? JSON.stringify(stateTrace, null, 2) : '状态副模型尚未运行。') + '</pre></article>' +
       '<article class="debug-card wide"><p class="eyebrow">CAPABILITY REACHABILITY</p><div class="row-list">' + pluginRows + '</div>' +
         '<div class="control-line" style="margin-top:10px"><button id="debugSuggestions">生成行动建议</button><button id="debugCharacterMemory">提取并保存角色记忆</button><button id="debugCheckpoint">创建时间线检查点</button></div>' +
         '<pre id="debugCapabilityOutput">' + escapeHtml(actionOutput || '这里的按钮会实际调用对应插件，用于确认能力不是“只注册、无入口”。') + '</pre></article></div>';
@@ -139,6 +145,7 @@
     var target = page('models');
     var caps = window.RPHost.capabilities();
     var settings = window.RPHost.settings();
+    var generation = settings && settings.generationParameters || {};
     var routes = window.RPModels.routes();
     var availableModels = window.RPModels.models();
     var rows = Object.keys(routes).map(function (id) {
@@ -154,15 +161,32 @@
         '<div><select data-model-route="' + escapeHtml(id) + '">' + options + '</select><div class="tiny">' + (route.model ? '卡内覆盖' : '继承 RP-Hub') + '</div></div>' +
         badge(available ? '直连可用' : '等待设置', available ? 'ok' : 'warn') + '</div>';
     }).join('');
+    function inheritedValue(value) {
+      if (value === undefined || value === null || value === '') return '未提供';
+      return Array.isArray(value) || typeof value === 'object' ? JSON.stringify(value) : String(value);
+    }
+    var generationRows = [
+      ['top_p', generation.topP],
+      ['max_tokens', generation.maxTokens],
+      ['max_completion_tokens', generation.maxCompletionTokens],
+      ['frequency_penalty', generation.frequencyPenalty],
+      ['presence_penalty', generation.presencePenalty],
+      ['stop', generation.stop],
+      ['reasoning_effort', generation.reasoningEffort],
+      ['provider parameters', generation.providerParameters && Object.keys(generation.providerParameters).length ? generation.providerParameters : null]
+    ].map(function (entry) {
+      return '<div class="data-row"><div><strong>' + escapeHtml(entry[0]) + '</strong></div><code>' + escapeHtml(inheritedValue(entry[1])) + '</code></div>';
+    }).join('');
     target.innerHTML = pageHead(
       '模型路由',
-      '运行时从同源 RP-Hub 设置读取当前端点与模型；密钥只留在请求闭包，不进入诊断、存档或界面。',
+      '运行时从同源 RP-Hub 设置读取当前端点、模型与生成参数；密钥只留在请求闭包，不进入诊断、存档或界面。',
       '<button type="button" class="secondary" id="refreshModels">刷新模型</button>'
     ) + '<div class="card-grid" style="margin-bottom:10px">' +
       '<article class="debug-card"><div class="metric"><span>配置状态</span><strong>' + (caps.sameOriginSettings ? 'READY' : 'WAIT') + '</strong></div></article>' +
       '<article class="debug-card"><div class="metric"><span>可见模型</span><strong>' + window.RPModels.models().length + '</strong></div></article>' +
       '<article class="debug-card"><div class="tiny">端点</div><code>' + escapeHtml(settings && settings.apiUrl || '未读取') + '</code></article>' +
-      '</div><div class="debug-card"><div class="row-list">' + rows + '</div></div>';
+      '</div><div class="debug-card"><div class="row-list">' + rows + '</div></div>' +
+      '<div class="debug-card" style="margin-top:10px"><p class="eyebrow">INHERITED GENERATION PARAMETERS</p><div class="row-list">' + generationRows + '</div></div>';
     target.querySelector('#refreshModels').onclick = async function () {
       this.disabled = true;
       await window.RPHost.refresh();
@@ -223,7 +247,7 @@
         if (!imported.ok) throw new Error(imported.errors.join('；') || '没有可导入条目');
         renderWorldbook();
       } catch (error) {
-        alert('世界书导入失败：' + error.message);
+        await window.RPDialog.alert('世界书导入失败：' + error.message);
       }
     };
     target.querySelector('#exportWorldbook').onclick = function () {

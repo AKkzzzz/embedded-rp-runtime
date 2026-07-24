@@ -209,8 +209,8 @@
       view.notice = '已按 RP-Hub 直接数组格式导出当前预设。';
       render(target);
     };
-    target.querySelector('[data-preset-reset]').onclick = function () {
-      if (!window.confirm('恢复默认会删除全部自定义预设和本地修改，继续吗？')) return;
+    target.querySelector('[data-preset-reset]').onclick = async function () {
+      if (!(await window.RPDialog.confirm('恢复默认会删除全部自定义预设和本地修改，继续吗？', { danger: true }))) return;
       window.RPPresets.reset();
       view.selectedId = null;
       view.query = '';
@@ -258,8 +258,8 @@
       render(target);
     };
     var remove = target.querySelector('[data-preset-delete]');
-    if (remove) remove.onclick = function () {
-      if (!window.confirm('删除自定义预设“' + selected.name + '”吗？')) return;
+    if (remove) remove.onclick = async function () {
+      if (!(await window.RPDialog.confirm('删除自定义预设“' + selected.name + '”吗？', { danger: true }))) return;
       window.RPPresets.remove(selected.id);
       view.selectedId = null;
       view.notice = '自定义预设已删除。';

@@ -5,6 +5,7 @@
   var prefix = data.app.storagePrefix;
   var stateKey = prefix + ':canonical';
   var preferencesKey = prefix + ':preferences';
+  var resetEpoch = 0;
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -102,7 +103,9 @@
     getPreferences: function () { return clone(preferences); },
     savePreferences: savePreferences,
     exportBundle: exportBundle,
+    epoch: function () { return resetEpoch; },
     reset: function () {
+      resetEpoch += 1;
       localStorage.removeItem(stateKey);
       localStorage.removeItem(preferencesKey);
       canonical = clone(data.initialState);

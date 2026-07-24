@@ -1,6 +1,8 @@
 (function () {
   'use strict';
 
+  var lastTrace = null;
+
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
@@ -51,6 +53,7 @@
   }
 
   async function updateFromChat(messages) {
+    var storageEpoch = window.RPStorage.epoch ? window.RPStorage.epoch() : 0;
     var state = window.RPStorage.getCanonical();
     var templates = Array.isArray(state.uiTemplates) ? state.uiTemplates : [];
     var active = templates.filter(function (template) { return template && template.enabled !== false && template.id; });
@@ -62,33 +65,52 @@
     }).slice(-8).map(function (message) {
       return { role: message.role, content: stripThought(message.content).slice(-12000) };
     });
+    var statePrompt = [
+      {
+        role: 'system',
+        content: '你是RP-Hub UI Template状态副模型。只根据已经发生的对话更新启用模板变量。只返回JSON：{"updates":[{"id":"模板id","variables":{"路径":"新值"},"reason":"简短理由"}]}。不要输出正文、推理、Markdown、预测或未发生的计划。没有变化返回{"updates":[]}。[DICE_RESULT|类型|骰式|骰点|结果|加骰次数|初始骰数]是运行时生成的公开检定证据，可以更新对应检定状态，但不是伤害、物品或剧情结果。'
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          templates: active.map(function (template) {
+            return {
+              id: template.id,
+              name: template.name || '',
+              variables: template.variableState || template.initialVariableState || {},
+              schema: template.variableSchema || null
+            };
+          }),
+          recentMessages: list
+        })
+      }
+    ];
+    var startedAt = Date.now();
+    lastTrace = {
+      startedAt: new Date(startedAt).toISOString(),
+      prompt: clone(statePrompt),
+      response: '',
+      parsed: null,
+      changed: [],
+      error: '',
+      durationMs: 0
+    };
     var result;
     try {
-      result = await window.RPModels.generate('state', [
-        {
-          role: 'system',
-          content: '你是RP-Hub UI Template状态副模型。只根据已经发生的对话更新启用模板变量。只返回JSON：{"updates":[{"id":"模板id","variables":{"路径":"新值"},"reason":"简短理由"}]}。不要输出正文、推理、Markdown、预测或未发生的计划。没有变化返回{"updates":[]}。'
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            templates: active.map(function (template) {
-              return {
-                id: template.id,
-                name: template.name || '',
-                variables: template.variableState || template.initialVariableState || {},
-                schema: template.variableSchema || null
-              };
-            }),
-            recentMessages: list
-          })
-        }
-      ], { stream: false, temperature: 0.05, monitor: false });
+      result = await window.RPModels.generate('state', statePrompt, { stream: false, temperature: 0.05, monitor: false });
     } catch (error) {
+      lastTrace.error = String(error.message || error);
+      lastTrace.durationMs = Date.now() - startedAt;
       window.RPEvents.emit('ui-template:sync', { ok: false, reason: String(error.message || error) });
       return { ok: false, reason: String(error.message || error) };
     }
-    var updates = normalizeUpdates(parse(result && result.content));
+    lastTrace.response = String(result && result.content || '');
+    if (window.RPStorage.epoch && storageEpoch !== window.RPStorage.epoch()) {
+      return { ok: false, reason: 'storage-reset' };
+    }
+    var parsed = parse(result && result.content);
+    lastTrace.parsed = clone(parsed);
+    var updates = normalizeUpdates(parsed);
     var changed = [];
     active.forEach(function (template) {
       var update = updates.find(function (item) { return !item.id || item.id === template.id; });
@@ -114,6 +136,8 @@
       changed.push(template.id);
     });
     if (!changed.length) {
+      lastTrace.changed = [];
+      lastTrace.durationMs = Date.now() - startedAt;
       window.RPEvents.emit('ui-template:sync', { ok: true, changed: [] });
       return { ok: true, changed: [] };
     }
@@ -126,13 +150,19 @@
       window.RPEvents.emit('ui-template:sync', { ok: false, errors: patched.errors });
       return { ok: false, errors: patched.errors };
     }
+    if (window.RPStorage.epoch && storageEpoch !== window.RPStorage.epoch()) {
+      return { ok: false, reason: 'storage-reset' };
+    }
     window.RPStorage.saveCanonical(patched.value);
+    lastTrace.changed = changed.slice();
+    lastTrace.durationMs = Date.now() - startedAt;
     window.RPEvents.emit('ui-template:sync', { ok: true, changed: changed });
     return { ok: true, changed: changed };
   }
 
   window.RPUIStateSync = {
     list: function () { return clone(window.RPStorage.getCanonical().uiTemplates || []); },
-    updateFromChat: updateFromChat
+    updateFromChat: updateFromChat,
+    trace: function () { return clone(lastTrace); }
   };
 })();
