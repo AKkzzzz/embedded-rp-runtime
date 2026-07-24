@@ -20,6 +20,11 @@
     return found.slice(0, 5);
   }
 
+  function callKey(call) {
+    return String(call.name || '').toLowerCase() + ':' + String(call.query || '')
+      .trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
   function definition(name) {
     var base = String(name).toLowerCase().replace(/_(?:add|cover)$/i, '');
     return tools.find(function (tool) {
@@ -126,16 +131,32 @@
     return { call: call, mode: /_cover$/i.test(call.name) ? 'cover' : 'add', status: 'unavailable', content: '联网工具需要宿主提供受控的搜索能力；当前卡内运行时未启用外部搜索。' };
   }
 
-  async function run(text, context) {
+  async function run(text, context, seen) {
     var parsed = parse(text);
     if (!parsed.length) return { calls: [], prompt: '' };
     var results = [];
-    for (var i = 0; i < parsed.length; i += 1) results.push(await execute(parsed[i], context));
+    for (var i = 0; i < parsed.length; i += 1) {
+      var key = callKey(parsed[i]);
+      var previous = seen && seen.get(key);
+      if (previous) {
+        results.push({
+          call: parsed[i],
+          mode: previous.mode || 'add',
+          status: 'duplicate',
+          content: '本轮同一工具调用已经执行过。沿用第一次结果：' + previous.content,
+          duplicateOf: key
+        });
+        continue;
+      }
+      var result = await execute(parsed[i], context);
+      results.push(result);
+      if (seen) seen.set(key, result);
+    }
     calls = calls.concat(results).slice(-20);
     var prompt = '<active_tool_results>\n' + results.map(function (result) {
       return '<active_tool_result name="' + result.call.name + '" mode="' + (result.mode || 'add') + '" status="' + result.status + '" query="' +
         result.call.query.replace(/"/g, '&quot;') + '">\n' + result.content + '\n</active_tool_result>';
-    }).join('\n\n') + '\n</active_tool_results>';
+    }).join('\n\n') + '\n</active_tool_results>\n工具结果已经确定；重复状态必须沿用第一次结果，不得再次调用或重新掷骰。现在根据工具结果继续完成本次回复。';
     return { calls: results, prompt: prompt };
   }
 
@@ -147,6 +168,7 @@
       window.RPStorage.savePreferences({ toolEnabled: next });
     },
     parse: parse,
+    callKey: callKey,
     rollDice: rollDice,
     rollPool: rollPool,
     run: run,

@@ -239,6 +239,30 @@ await sandbox.RPConversation.regenerate();
 assert.equal(sandbox.RPConversation.list().length, 2);
 assert.equal(sandbox.RPConversation.list()[1].content, '替代回复');
 
+let releaseStaleResponse;
+responses.push(new Promise(resolve => { releaseStaleResponse = resolve; }));
+const staleGeneration = sandbox.RPConversation.send('这条请求会在清档后返回');
+for (let attempt = 0; attempt < 20 && !sandbox.RPConversation.isGenerating(); attempt += 1) {
+  await new Promise(resolve => setTimeout(resolve, 0));
+}
+assert.equal(sandbox.RPConversation.isGenerating(), true);
+await sandbox.RPConversation.clear();
+assert.equal(sandbox.RPConversation.isGenerating(), false);
+releaseStaleResponse(new Response([
+  'data: {"choices":[{"delta":{"content":"不应复活的旧回复"}}]}',
+  '',
+  'data: [DONE]',
+  ''
+].join('\n'), {
+  status: 200,
+  headers: { 'content-type': 'text/event-stream' }
+}));
+await staleGeneration;
+assert.deepEqual(sandbox.RPConversation.list(), []);
+assert.deepEqual(sandbox.RPConversation.committed(), []);
+assert.deepEqual(sandbox.RPStorage.getCanonical().conversation.messages, []);
+await sandbox.RPConversation.whenStateSettled();
+
 const exported = JSON.stringify(sandbox.RPStorage.exportBundle());
 const diagnostics = JSON.stringify(sandbox.RPModels.diagnostics());
 assert.equal(exported.includes(secret), false);
@@ -251,5 +275,6 @@ console.log(JSON.stringify({
   streaming: streamed.content,
   jsonFallback: jsonResult.content,
   conversationOperations: true,
+  clearRaceGuard: true,
   secretLeak: false
 }, null, 2));

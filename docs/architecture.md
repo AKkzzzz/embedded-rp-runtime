@@ -64,8 +64,14 @@ route 只保存模型 ID 和参数，不保存 Key。配置可继承 RP-Hub 当�
 
 主叙事和 UI Template 状态副模型分别保留最近一次只读调试轨迹：请求消息、真实响应、解析结果、工具调用与耗时。renderer 通过 `RPConversation.debugTrace()` 和 `RPUIStateSync.trace()` 读取；调试轨迹不进入下一轮提示词，也不参与状态裁定。
 
+Prompt Compiler 不把整份 canonical state 暴露给主模型。它只注入叙事需要的紧凑变量视图：玩家、场景、RPG 角色、在场人物、任务、背包、属性、影片和战斗状态。运行时模式、完整对话、知识库内部结构与 UI Template 配置继续由各自服务持有，避免提示词膨胀和实现细节污染正文。
+
 骰子工具返回结构化结果。Conversation Engine 将真实工具结果写成
 `[DICE_RESULT|类型|骰式|骰点|结果|加骰次数|初始骰数]`，再继续同一轮生成。该事件由运行时拥有，模型不得自行伪造；具体卡的 renderer 可把它显示为骰面、跑团日志或战斗播报。
+
+每次主模型生成都持有一个 `generationEpoch`。清档会递增世代并中止当前请求；属于旧世代的流式增量、工具续写、完成回调和错误回调全部失去提交资格，因此延迟到达的宿主响应不能恢复已经清除的楼层。状态模型与 UI Template 更新共用串行队列，renderer 可通过 `RPConversation.whenStateSettled()` 等待收敛。
+
+Conversation Engine 为每轮工具续写维护调用键集合。相同工具名与规范化参数在同一轮只执行一次，后续重复调用只返回第一次结果；骰子不会因为模型重复输出工具标签而重新投掷。
 
 ### Storage Engine
 

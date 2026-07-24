@@ -37,6 +37,21 @@ const encoded = [...launcher.matchAll(/H4sIA[A-Za-z0-9+/=]+/g)]
 if (!encoded) throw new Error('compressed inner app missing');
 const inner = zlib.gunzipSync(Buffer.from(encoded, 'base64')).toString('utf8');
 
+const sourceContracts = [
+  ['ui/runtime/prompt-compiler.js', ["source: 'state:variables'"], ["source: 'state:canonical'"]],
+  ['ui/runtime/conversation-engine.js', ['generationEpoch', 'whenStateSettled', 'committed:'], []],
+  ['ui/runtime/tool-engine.js', ['function callKey', "status: 'duplicate'"], []]
+];
+for (const [relative, required, forbidden] of sourceContracts) {
+  const source = fs.readFileSync(path.join(root, relative), 'utf8');
+  for (const needle of required) {
+    if (!source.includes(needle)) throw new Error(`${relative} missing runtime contract: ${needle}`);
+  }
+  for (const needle of forbidden) {
+    if (source.includes(needle)) throw new Error(`${relative} retains forbidden runtime contract: ${needle}`);
+  }
+}
+
 for (const needle of [
   '卡内后台小酒馆',
   'window.RPHost',
@@ -54,6 +69,19 @@ for (const needle of [
   'window.RPPresetManager'
 ]) {
   if (!inner.includes(needle)) throw new Error(`inner runtime missing ${needle}`);
+}
+
+for (const needle of [
+  "source: 'state:variables'",
+  'generationEpoch',
+  'whenStateSettled',
+  'function callKey',
+  "status: 'duplicate'"
+]) {
+  if (!inner.includes(needle)) throw new Error(`packed runtime missing contract: ${needle}`);
+}
+if (inner.includes("source: 'state:canonical'")) {
+  throw new Error('packed runtime still injects full canonical state');
 }
 
 for (const required of [

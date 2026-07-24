@@ -8,13 +8,14 @@
 
 - RP-Hub 官方预设快照与 Prompt Compiler；
 - RP-Hub 世界书字段、扫描深度、概率、七类注入位置和卡内递归；
-- 流式模型调用、停止、继续、重生成、编辑、删除、清空楼层；
-- 40 楼默认历史保留策略、结构化总结和 Int8 向量记忆；
+- 流式模型调用、停止、继续、重生成、编辑、删除、清空楼层，以及清档竞态保护；
+- 可配置历史保留策略（当前模板默认 40 楼）、结构化总结和 Int8 向量记忆；
 - 后台向量巡检、失败重试队列和本地 IndexedDB 存储；
 - 状态 schema、世界书补丁审批和版本冲突检查；
 - 插件生命周期、能力声明、依赖排序、启停和错误隔离；
 - 时间线、RPG 状态、白名单命令、变量浮层、动态 Lore、WebLLM 和媒体能力适配器；
 - `d20`、`NdM`、修正值骰子工具与 `/roll` 命令；
+- 单轮工具调用去重，工具续写不能重复掷同一颗骰子或重复执行同一查询；
 - Debug 控制台、单舞台 renderer 入口和静态 JSON 构建出口。
 
 刻意没有做成宿主替代品的部分：
@@ -54,9 +55,12 @@ RPConversation.regenerate()
 RPConversation.edit(messageId, content)
 RPConversation.remove(messageId)
 RPConversation.clear()
+RPConversation.committed()
+RPConversation.whenStateSettled()
 ```
 
 模型输出统一经过 Prompt Compiler、工具多轮续写、Prompt Regex 和存储提交；表现层不应自行复制一套聊天状态。
+`committed()` 只返回已经落盘的楼层，不包含流式草稿；`whenStateSettled()` 供 renderer 等待状态副模型与 UI Template 同步队列完成。清档会递增生成世代并中止当前请求，即使宿主稍后仍返回旧数据，也不能把旧楼层重新写回。
 
 ### 世界书、状态与记忆
 

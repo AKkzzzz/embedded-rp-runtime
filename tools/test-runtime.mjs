@@ -122,6 +122,8 @@ sandbox.RPPresets.reset();
 
 const personalizedState = sandbox.RPStorage.getCanonical();
 personalizedState.player.name = '测试玩家';
+personalizedState.rpg.inventory = [{ id: 'test-item', name: '测试物品', quantity: 1 }];
+personalizedState.rpg.stats = { hp: '5/5' };
 sandbox.RPStorage.saveCanonical(personalizedState);
 const compiledPrompt = await sandbox.RPPrompt.compile('{{user}}检查世界书递归扫描');
 assert(compiledPrompt.messages.some(message => message.content.includes('[Style Priority]')));
@@ -136,6 +138,16 @@ assert.equal(JSON.stringify(compiledPrompt.messages.slice(0, 6).map(message => m
   'preset:rphub-official-04'
 ]));
 assert(compiledPrompt.messages.some(message => message.source === 'character:context' && message.content.includes('递归检索必须')));
+const variableMessage = compiledPrompt.messages.find(message => message.source === 'state:variables');
+assert(variableMessage);
+const narrativeState = JSON.parse(variableMessage.content.replace(/^【当前变量状态】\n/, ''));
+assert.deepEqual(narrativeState.rpg.inventory, personalizedState.rpg.inventory);
+assert.deepEqual(narrativeState.rpg.stats, personalizedState.rpg.stats);
+assert.equal(narrativeState.player.name, '测试玩家');
+for (const privateKey of ['runtime', 'conversation', 'knowledge', 'uiTemplates']) {
+  assert.equal(Object.prototype.hasOwnProperty.call(narrativeState, privateKey), false);
+}
+assert.equal(compiledPrompt.messages.some(message => message.source === 'state:canonical'), false);
 
 const retrieval = sandbox.RPWorldbook.retrieve('请检查世界书递归扫描');
 assert.deepEqual(retrieval.hits.map(hit => hit.id), ['runtime-contract', 'example-regex-trigger']);
@@ -323,6 +335,13 @@ const diceTool = await sandbox.RPTools.run('<tool_dice:2d6+3>');
 assert.equal(diceTool.calls.length, 1);
 assert.equal(diceTool.calls[0].status, 'ok');
 assert.match(diceTool.calls[0].content, /结果 = \d+/);
+const seenDiceCalls = new Map();
+const firstDiceCall = await sandbox.RPTools.run('<tool_dice:2d6+3>', {}, seenDiceCalls);
+const duplicateDiceCall = await sandbox.RPTools.run('<tool_dice:2d6+3>', {}, seenDiceCalls);
+assert.equal(firstDiceCall.calls[0].status, 'ok');
+assert.equal(duplicateDiceCall.calls[0].status, 'duplicate');
+assert.match(duplicateDiceCall.calls[0].content, /沿用第一次结果/);
+assert.match(duplicateDiceCall.prompt, /不得再次调用或重新掷骰/);
 const poolTool = await sandbox.RPTools.run('<tool_dice:pool 6d10>');
 assert.equal(poolTool.calls.length, 1);
 assert.equal(poolTool.calls[0].status, 'ok');

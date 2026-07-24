@@ -3,7 +3,8 @@
 
   var active = null;
   var sequence = 0;
-  var uiTemplateSyncPending = Promise.resolve();
+  var stateSyncPending = Promise.resolve();
+  var generationEpoch = 0;
   var lastNarrativeTrace = null;
 
   function clone(value) {
@@ -74,7 +75,9 @@
   async function generateWith(input, baseMessages, options) {
     options = options || {};
     if (active) throw new Error('已有生成任务正在进行');
-    await uiTemplateSyncPending;
+    await stateSyncPending;
+    if (window.RPStateSync && window.RPStateSync.clearSuggestions) window.RPStateSync.clearSuggestions();
+    var epoch = generationEpoch;
     var controller = new AbortController();
     var draft = {
       id: id('assistant'),
@@ -113,39 +116,46 @@
       var result = await window.RPModels.generate('narrative', requestMessages, {
         signal: controller.signal,
         onDelta: function (delta) {
+          if (epoch !== generationEpoch) return;
           draft.content += delta;
           changed('stream-delta');
         },
         onReasoning: function (delta) {
+          if (epoch !== generationEpoch) return;
           draft.reasoning += delta;
           changed('reasoning-delta');
         }
       });
+      if (epoch !== generationEpoch) return clone(draft);
       if (!draft.content && result.content) draft.content = result.content;
       if (!draft.reasoning && result.reasoning) draft.reasoning = result.reasoning;
       var toolRounds = 0;
+      var seenToolCalls = new Map();
       var toolSource = result.content || draft.content;
       while (window.RPTools && toolRounds < 4) {
-        var toolResult = await window.RPTools.run(toolSource, { messages: baseMessages });
+        var toolResult = await window.RPTools.run(toolSource, { messages: baseMessages }, seenToolCalls);
         if (!toolResult.calls.length) break;
         lastNarrativeTrace.toolResults = lastNarrativeTrace.toolResults.concat(clone(toolResult.calls));
         toolRounds += 1;
         requestMessages.push({ role: 'assistant', content: draft.content, source: 'tool:request' });
         requestMessages.push({ role: 'user', content: toolResult.prompt, source: 'tool:result' });
-        var diceMarkers = toolResult.calls.map(diceMarker).filter(Boolean);
+        var diceMarkers = toolResult.calls.filter(function (call) { return call.status !== 'duplicate'; }).map(diceMarker).filter(Boolean);
         if (diceMarkers.length) draft.content += '\n\n' + diceMarkers.join('\n') + '\n\n';
         var beforeToolContinuation = draft.content.length;
         var continuation = await window.RPModels.generate('narrative', requestMessages, {
           signal: controller.signal,
           onDelta: function (delta) {
+            if (epoch !== generationEpoch) return;
             draft.content += delta;
             changed('stream-delta');
           },
           onReasoning: function (delta) {
+            if (epoch !== generationEpoch) return;
             draft.reasoning += delta;
             changed('reasoning-delta');
           }
         });
+        if (epoch !== generationEpoch) return clone(draft);
         var generated = draft.content.slice(beforeToolContinuation) || continuation.content || '';
         requestMessages.push({ role: 'assistant', content: generated, source: 'tool:continuation' });
         toolSource = generated;
@@ -168,13 +178,21 @@
       } else {
         finalMessages.push(clone(draft));
       }
+      if (epoch !== generationEpoch) return clone(draft);
       lastNarrativeTrace.response = draft.content;
       lastNarrativeTrace.reasoning = draft.reasoning;
       lastNarrativeTrace.completedAt = now();
       active = null;
       persist(finalMessages, 'idle');
+      if (window.RPStateSync) {
+        stateSyncPending = stateSyncPending.then(function () {
+          return window.RPStateSync.reconcile(options.stateInput || input, draft.content);
+        }).catch(function (error) {
+          window.RPEvents.emit('state:sync', { ok: false, source: 'state-model', reason: String(error.message || error) });
+        });
+      }
       if (window.RPUIStateSync) {
-        uiTemplateSyncPending = uiTemplateSyncPending.then(function () {
+        stateSyncPending = stateSyncPending.then(function () {
           return window.RPUIStateSync.updateFromChat(finalMessages);
         }).catch(function (error) {
           window.RPEvents.emit('ui-template:sync', { ok: false, reason: String(error.message || error) });
@@ -193,6 +211,7 @@
       await changed('generation-complete');
       return clone(draft);
     } catch (error) {
+      if (epoch !== generationEpoch) return clone(draft);
       var interrupted = error && error.name === 'AbortError';
       var failedMessages = baseMessages.slice();
       if (!options.appendToId && draft.content) {
@@ -291,13 +310,18 @@
   }
 
   async function clear() {
-    if (active) stop();
+    generationEpoch += 1;
+    if (active && active.controller) active.controller.abort();
+    active = null;
+    stateSyncPending = Promise.resolve();
     persist([], 'idle');
     await changed('conversation-cleared');
+    return true;
   }
 
   window.RPConversation = {
     list: visible,
+    committed: function () { return clone(canonicalConversation().messages); },
     isGenerating: function () { return Boolean(active); },
     send: send,
     stop: stop,
@@ -306,6 +330,7 @@
     edit: edit,
     remove: remove,
     clear: clear,
+    whenStateSettled: function () { return stateSyncPending.catch(function () { return null; }); },
     debugTrace: function () { return clone(lastNarrativeTrace); },
     diagnostics: function () {
       var conversation = canonicalConversation();

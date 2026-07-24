@@ -96,6 +96,25 @@
     });
   }
 
+  function narrativeVariables(state) {
+    var root = state || {};
+    var rpg = root.rpg || {};
+    return {
+      player: root.player || {},
+      scene: rpg.scene || root.scene || {},
+      rpg: {
+        revision: rpg.revision,
+        player: rpg.player || {},
+        presentCharacters: rpg.presentCharacters || [],
+        quests: rpg.quests || [],
+        inventory: rpg.inventory || [],
+        stats: rpg.stats || {},
+        film: rpg.film || {},
+        battle: rpg.battle || {}
+      }
+    };
+  }
+
   async function compile(input, options) {
     options = Object.assign({
       history: [],
@@ -181,8 +200,8 @@
     }
     messages.push({
       role: 'system',
-      content: '【当前权威状态】\n' + JSON.stringify(options.state),
-      source: 'state:canonical'
+      content: '【当前变量状态】\n' + JSON.stringify(narrativeVariables(options.state)),
+      source: 'state:variables'
     });
 
     var safeTargetLimit = messages.length;
