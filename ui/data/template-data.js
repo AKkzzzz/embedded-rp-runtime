@@ -161,7 +161,8 @@
         inventory: [],
         stats: {},
         scene: {}
-      }
+      },
+      uiTemplates: []
     },
     stateSchema: {
       type: 'object',
@@ -273,9 +274,13 @@
             scene: { type: 'object', additionalProperties: true }
           },
           required: ['revision', 'player', 'presentCharacters', 'quests', 'inventory', 'stats', 'scene']
+        },
+        uiTemplates: {
+          type: 'array',
+          items: { type: 'object', additionalProperties: true }
         }
       },
-      required: ['runtime', 'player', 'scene', 'conversation', 'knowledge', 'flags', 'rpg']
+      required: ['runtime', 'player', 'scene', 'conversation', 'knowledge', 'flags', 'rpg', 'uiTemplates']
     },
     plugins: [
       {

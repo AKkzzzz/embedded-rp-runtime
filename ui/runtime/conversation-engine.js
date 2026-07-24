@@ -3,6 +3,7 @@
 
   var active = null;
   var sequence = 0;
+  var uiTemplateSyncPending = Promise.resolve();
 
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -55,6 +56,7 @@
   async function generateWith(input, baseMessages, options) {
     options = options || {};
     if (active) throw new Error('已有生成任务正在进行');
+    await uiTemplateSyncPending;
     var controller = new AbortController();
     var draft = {
       id: id('assistant'),
@@ -136,6 +138,13 @@
       }
       active = null;
       persist(finalMessages, 'idle');
+      if (window.RPUIStateSync) {
+        uiTemplateSyncPending = uiTemplateSyncPending.then(function () {
+          return window.RPUIStateSync.updateFromChat(finalMessages);
+        }).catch(function (error) {
+          window.RPEvents.emit('ui-template:sync', { ok: false, reason: String(error.message || error) });
+        });
+      }
       if (window.RPVectorMemory) {
         window.RPVectorMemory.indexMessages(finalMessages).catch(function (error) {
           window.RPEvents.emit('memory:vector:error', { message: String(error.message || error) });

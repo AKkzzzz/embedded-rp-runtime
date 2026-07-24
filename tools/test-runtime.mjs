@@ -58,6 +58,7 @@ for (const relative of [
   'ui/runtime/storage-engine.js',
   'ui/runtime/preset-store.js',
   'ui/runtime/state-guard.js',
+  'ui/runtime/ui-template-state.js',
   'ui/runtime/regex-engine.js',
   'ui/runtime/plugin-runtime.js',
   'ui/runtime/capability-plugins.js',
@@ -76,6 +77,7 @@ const stateValidation = sandbox.RPStateGuard.validate(
   sandbox.RPTemplateData.stateSchema
 );
 assert.equal(stateValidation.ok, true);
+assert.deepEqual(sandbox.RPUIStateSync.list(), []);
 assert.equal(sandbox.RPPresets.list().length, 15);
 assert.equal(sandbox.RPPresets.byId('rphub-official-13').runtimeEnabled, true);
 assert.equal(sandbox.RPPresets.setEnabled('rphub-official-12', true), true);

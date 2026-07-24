@@ -48,6 +48,7 @@ for (const needle of [
   'window.RPPlugins',
   'window.RPPrompt',
   'window.RPConversation',
+  'window.RPUIStateSync',
   'window.RPGenerationMonitor',
   'window.RPDiagnostics',
   'window.RPPresetManager'
@@ -93,6 +94,7 @@ const runtimeFiles = [
   'ui/runtime/memory-engine.js',
   'ui/runtime/summary-engine.js',
   'ui/runtime/prompt-compiler.js',
+  'ui/runtime/ui-template-state.js',
   'ui/runtime/conversation-engine.js',
   'ui/runtime/diagnostics.js',
   'ui/scripts/preset-manager.js',
