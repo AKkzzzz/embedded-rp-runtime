@@ -149,6 +149,47 @@
     return true;
   }
 
+  function saveLocal(entry) {
+    var state = canonical();
+    var normalized = window.RPWorldbook.normalizeEntry(Object.assign({}, entry, { source: entry.source || 'user', locked: false }), 0);
+    var errors = validateEntry(normalized).filter(function (error) { return error !== 'entry.source is invalid'; });
+    if (errors.length) return { ok: false, errors: errors };
+    var index = state.knowledge.entries.findIndex(function (item) { return item.id === normalized.id; });
+    if (index >= 0) state.knowledge.entries[index] = normalized;
+    else state.knowledge.entries.push(normalized);
+    state.knowledge.revision += 1;
+    var whole = window.RPStateGuard.validate(state, window.RPTemplateData.stateSchema);
+    if (!whole.ok) return whole;
+    window.RPStorage.saveCanonical(state);
+    window.RPEvents.emit('worldbook:local:changed', { id: normalized.id, revision: state.knowledge.revision });
+    return { ok: true, entry: clone(normalized), revision: state.knowledge.revision };
+  }
+
+  function createLocal(entry) {
+    var next = Object.assign({
+      id: 'local-' + Date.now().toString(36), name: '新条目', content: '', enabled: true,
+      locked: false, source: 'user', order: 100, placement: 'before_character', dependencies: []
+    }, clone(entry || {}));
+    return saveLocal(next);
+  }
+
+  function updateLocal(id, patch) {
+    var current = localById(canonical(), id);
+    if (!current) return { ok: false, errors: ['只有卡内本地条目可以直接编辑'] };
+    return saveLocal(Object.assign({}, current, clone(patch || {}), { id: id, source: 'user', locked: false }));
+  }
+
+  function removeLocal(id) {
+    var state = canonical();
+    var index = state.knowledge.entries.findIndex(function (item) { return item.id === id; });
+    if (index < 0) return { ok: false, errors: ['本地条目不存在'] };
+    state.knowledge.entries.splice(index, 1);
+    state.knowledge.revision += 1;
+    window.RPStorage.saveCanonical(state);
+    window.RPEvents.emit('worldbook:local:changed', { id: id, removed: true, revision: state.knowledge.revision });
+    return { ok: true, revision: state.knowledge.revision };
+  }
+
   window.RPWorldbookPatches = {
     entries: function () { return clone(canonical().knowledge.entries || []); },
     proposals: function () { return clone(canonical().knowledge.pendingProposals || []); },
@@ -156,5 +197,8 @@
     propose: propose,
     commit: commit,
     reject: reject
+    ,createLocal: createLocal,
+    updateLocal: updateLocal,
+    removeLocal: removeLocal
   };
 })();

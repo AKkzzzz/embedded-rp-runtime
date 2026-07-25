@@ -21,6 +21,12 @@
     await window.RPConversation.init();
     await window.RPMemory.init();
     await window.RPVectorMemory.init();
+    setTimeout(function () {
+      var memoryModules = window.RPStorage.getPreferences().memoryModules || {};
+      if (memoryModules.memoryMode !== 'vector' && window.RPSummary && window.RPConversation) {
+        window.RPSummary.patrol(window.RPConversation.list()).catch(function () {});
+      }
+    }, 0);
     var hostChip = document.getElementById('hostChip');
     hostChip.textContent = caps.sameOriginSettings ? 'RP-Hub 配置已接入' : '等待 RP-Hub API 设置';
     hostChip.classList.add(caps.sameOriginSettings ? 'ok' : 'degraded');

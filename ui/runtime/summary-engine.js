@@ -6,8 +6,10 @@
 
   function settings() {
     return Object.assign({
+      memoryMode: 'classic',
       summaryEnabled: false,
       summaryConcurrency: 5,
+      summaryKeepFloors: 40,
       maxHistoryFloors: 40
     }, window.RPStorage.getPreferences().memoryModules || {});
   }
@@ -200,7 +202,7 @@
   }
 
   function summarize(messages) {
-    if (!settings().summaryEnabled) return Promise.resolve({ ok: false, skipped: true });
+    if (settings().memoryMode === 'vector' || !settings().summaryEnabled) return Promise.resolve({ ok: false, skipped: true });
     if (activePatrol) return activePatrol;
     activePatrol = runPatrol(messages).finally(function () { activePatrol = null; });
     return activePatrol;

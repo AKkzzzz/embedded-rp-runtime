@@ -112,7 +112,7 @@
     committedMessages = clone(messages);
     committedRevision = Math.max(committedRevision, Number(state.conversation && state.conversation.revision || 1)) + 1;
     var configured = window.RPStorage.getPreferences().memoryModules || {};
-    var recentFloors = Math.max(1, Number(configured.maxHistoryFloors) || 40);
+    var recentFloors = Math.max(1, Number(configured.memoryMode === 'vector' ? configured.vectorKeepFloors : configured.summaryKeepFloors) || 40);
     var canonicalMessages = typeof indexedDB === 'undefined'
       ? committedMessages
       : committedMessages.slice(-recentFloors * 2);
@@ -178,9 +178,9 @@
     await changed('generation-start');
     try {
       var configured = window.RPStorage.getPreferences().memoryModules || {};
-      var maxFloors = Math.max(0, Number(configured.maxHistoryFloors || 50));
+      var maxFloors = Math.max(0, Number(configured.memoryMode === 'vector' ? configured.vectorKeepFloors : configured.summaryKeepFloors || 40));
       var sourceHistory = options.historyMessages || baseMessages;
-      var promptHistory = configured.summaryEnabled && window.RPSummary
+      var promptHistory = configured.memoryMode !== 'vector' && window.RPSummary
         ? window.RPSummary.contextHistory(sourceHistory, maxFloors)
         : (maxFloors > 0 ? sourceHistory.slice(-maxFloors * 2) : sourceHistory);
       var compiled = await window.RPPrompt.compile(input, {
@@ -420,7 +420,4 @@
       };
     }
   };
-  if (canonicalConversation().status === 'generating') {
-    persist(canonicalConversation().messages, 'idle');
-  }
 })();

@@ -48,6 +48,7 @@
       toolEnabled: {},
       reducedMotion: false,
       memoryModules: {
+        memoryMode: 'classic',
         vectorEnabled: false,
         summaryEnabled: false,
         inheritRpHub: true,
@@ -56,6 +57,8 @@
         patrolIntervalMs: 60000,
         retryEnabled: true,
         maxRetryAttempts: 6,
+        summaryKeepFloors: 40,
+        vectorKeepFloors: 40,
         maxHistoryFloors: 40,
         topK: 10,
         similarityThreshold: 0.5,
@@ -71,10 +74,19 @@
   if (!preferences.memoryModules || !Object.prototype.hasOwnProperty.call(preferences.memoryModules, 'historyPolicyVersion')) {
     preferences.memoryModules = Object.assign({}, preferences.memoryModules || {}, {
       maxHistoryFloors: 40,
+      summaryKeepFloors: Number(preferences.memoryModules && preferences.memoryModules.summaryKeepFloors) || Number(preferences.memoryModules && preferences.memoryModules.maxHistoryFloors) || 40,
+      vectorKeepFloors: Number(preferences.memoryModules && preferences.memoryModules.vectorKeepFloors) || Number(preferences.memoryModules && preferences.memoryModules.maxHistoryFloors) || 40,
       historyPolicyVersion: 2
     });
     try { localStorage.setItem(preferencesKey, JSON.stringify(preferences)); } catch (_error) {}
   }
+  preferences.memoryModules = preferences.memoryModules || {};
+  if (!preferences.memoryModules.memoryMode) preferences.memoryModules.memoryMode = preferences.memoryModules.vectorEnabled ? 'vector' : 'classic';
+  preferences.memoryModules.memoryMode = preferences.memoryModules.memoryMode === 'vector' ? 'vector' : 'classic';
+  preferences.memoryModules.vectorEnabled = preferences.memoryModules.memoryMode === 'vector';
+  preferences.memoryModules.summaryEnabled = preferences.memoryModules.memoryMode === 'classic';
+  preferences.memoryModules.summaryKeepFloors = Math.max(0, Number(preferences.memoryModules.summaryKeepFloors || preferences.memoryModules.maxHistoryFloors || 40));
+  preferences.memoryModules.vectorKeepFloors = Math.max(0, Number(preferences.memoryModules.vectorKeepFloors || preferences.memoryModules.maxHistoryFloors || 40));
   if (!preferences.memoryModules || preferences.memoryModules.summaryPolicyVersion !== 1) {
     preferences.memoryModules = Object.assign({}, preferences.memoryModules || {}, {
       summaryConcurrency: 5,
@@ -93,6 +105,19 @@
 
   function savePreferences(next) {
     preferences = Object.assign({}, preferences, clone(next || {}));
+    if (next && next.memoryModules) {
+      preferences.memoryModules = Object.assign({}, preferences.memoryModules || {}, clone(next.memoryModules));
+      var requestedMode = Object.prototype.hasOwnProperty.call(next.memoryModules, 'memoryMode')
+        ? next.memoryModules.memoryMode
+        : (next.memoryModules.vectorEnabled ? 'vector' : (next.memoryModules.summaryEnabled ? 'classic' : preferences.memoryModules.memoryMode));
+      preferences.memoryModules.memoryMode = requestedMode === 'vector' ? 'vector' : 'classic';
+      preferences.memoryModules.vectorEnabled = preferences.memoryModules.memoryMode === 'vector';
+      preferences.memoryModules.summaryEnabled = preferences.memoryModules.memoryMode === 'classic';
+      if (Object.prototype.hasOwnProperty.call(next.memoryModules, 'maxHistoryFloors')) {
+        if (!Object.prototype.hasOwnProperty.call(next.memoryModules, 'summaryKeepFloors')) preferences.memoryModules.summaryKeepFloors = Number(next.memoryModules.maxHistoryFloors) || 0;
+        if (!Object.prototype.hasOwnProperty.call(next.memoryModules, 'vectorKeepFloors')) preferences.memoryModules.vectorKeepFloors = Number(next.memoryModules.maxHistoryFloors) || 0;
+      }
+    }
     localStorage.setItem(preferencesKey, JSON.stringify(preferences));
     window.RPEvents.emit('storage:preferences:changed', clone(preferences));
     return clone(preferences);

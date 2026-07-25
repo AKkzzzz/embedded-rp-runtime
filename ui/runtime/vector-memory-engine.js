@@ -3,6 +3,8 @@
 
   var dbName = window.RPTemplateData.app.storagePrefix + ':vectors:v1';
   var storeName = 'vectors';
+  var metaStoreName = 'meta';
+  var ledgerKey = 'indexed-fingerprints';
   var queueKey = window.RPTemplateData.app.storagePrefix + ':vector-retry-queue';
   var memory = [];
   var queue = readQueue();
@@ -11,6 +13,7 @@
   var patrolTimer = null;
   var patrolRunning = false;
   var retryDelays = [5000, 30000, 120000, 600000, 1800000, 3600000];
+  var indexedFingerprints = new Set();
 
   function prefs() {
     var value = window.RPStorage.getPreferences().memoryModules || {};
@@ -21,6 +24,7 @@
       patrolIntervalMs: 60000,
       retryEnabled: true,
       maxRetryAttempts: 6,
+      vectorKeepFloors: 40,
       maxHistoryFloors: 40,
       topK: 10,
       similarityThreshold: 0.5,
@@ -191,9 +195,10 @@
     if (typeof indexedDB === 'undefined') return Promise.resolve(null);
     dbPromise = new Promise(function (resolve) {
       try {
-        var request = indexedDB.open(dbName, 1);
+        var request = indexedDB.open(dbName, 2);
         request.onupgradeneeded = function () {
           if (!request.result.objectStoreNames.contains(storeName)) request.result.createObjectStore(storeName, { keyPath: 'id' });
+          if (!request.result.objectStoreNames.contains(metaStoreName)) request.result.createObjectStore(metaStoreName);
         };
         request.onsuccess = function () { resolve(request.result); };
         request.onerror = function () { resolve(null); };
@@ -209,10 +214,16 @@
     if (db) {
       await new Promise(function (resolve) {
         try {
-          var request = db.transaction(storeName, 'readonly').objectStore(storeName).getAll();
+          var transaction = db.transaction([storeName, metaStoreName], 'readonly');
+          var request = transaction.objectStore(storeName).getAll();
+          var ledgerRequest = transaction.objectStore(metaStoreName).get(ledgerKey);
           request.onsuccess = function () {
             memory = (Array.isArray(request.result) ? request.result : []).map(prepareRuntime);
-            resolve();
+            ledgerRequest.onsuccess = function () {
+              indexedFingerprints = new Set(Array.isArray(ledgerRequest.result) ? ledgerRequest.result : memory.map(function (item) { return item.fingerprint; }));
+              resolve();
+            };
+            ledgerRequest.onerror = function () { resolve(); };
           };
           request.onerror = function () { resolve(); };
         } catch (_error) { resolve(); }
@@ -232,6 +243,9 @@
         var store = transaction.objectStore(storeName);
         store.clear();
         persisted.forEach(function (item) { store.put(item); });
+        if (transaction.objectStoreNames && transaction.objectStoreNames.contains(metaStoreName)) {
+          transaction.objectStore(metaStoreName).put(Array.from(indexedFingerprints), ledgerKey);
+        }
         transaction.oncomplete = resolve;
         transaction.onerror = resolve;
       } catch (_error) { resolve(); }
@@ -248,6 +262,7 @@
       try {
         var transaction = db.transaction(storeName, 'readwrite');
         transaction.objectStore(storeName).clear();
+        if (transaction.objectStoreNames && transaction.objectStoreNames.contains(metaStoreName)) transaction.objectStore(metaStoreName).delete(ledgerKey);
         transaction.oncomplete = resolve;
         transaction.onerror = resolve;
       } catch (_error) { resolve(); }
@@ -274,7 +289,8 @@
   }
 
   function buildChunks(messages) {
-    var existing = new Set(memory.map(function (item) { return item.fingerprint; }));
+    var existing = new Set(Array.from(indexedFingerprints));
+    memory.forEach(function (item) { existing.add(item.fingerprint); });
     queue.forEach(function (task) {
       (task.chunks || []).forEach(function (chunk) { existing.add(chunk.fingerprint); });
     });
@@ -332,6 +348,7 @@
     var additions = chunks.map(function (item, index) {
       return prepareRuntime(Object.assign({}, item, { embedding: vectors[index] }));
     });
+    additions.forEach(function (item) { indexedFingerprints.add(item.fingerprint); });
     var settings = prefs();
     var next = memory.concat(additions).slice(-Math.max(100, Number(settings.maxVectors) || 2000));
     await save(next);
@@ -427,7 +444,7 @@
     var queryVector = vectors[0];
     var terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
     var messages = window.RPConversation && window.RPConversation.list ? window.RPConversation.list() : [];
-    var retained = retainedTurnSet(messages, settings.maxHistoryFloors);
+    var retained = retainedTurnSet(messages, settings.vectorKeepFloors || settings.maxHistoryFloors);
     return memory.filter(function (item) { return !retained.has(Number(item.turn || 0)); }).map(function (item) {
       var score = cosine(queryVector, item.embedding);
       var hits = terms.filter(function (term) { return item.sourceText.toLowerCase().includes(term); });
@@ -451,7 +468,7 @@
     stats: function () {
       var messages = window.RPConversation && window.RPConversation.list ? window.RPConversation.list() : [];
       var floors = completeTurns(messages).length;
-      var keep = Math.max(0, Number(prefs().maxHistoryFloors) || 0);
+      var keep = Math.max(0, Number(prefs().vectorKeepFloors || prefs().maxHistoryFloors) || 0);
       var indexedTurns = new Set(memory.map(function (item) { return Number(item.turn || 0); }).filter(Boolean));
       var dims = memory.reduce(function (sum, item) { return sum + Number(item.embeddingDims || item.embedding && item.embedding.length || 0); }, 0);
       var packedBytes = memory.reduce(function (sum, item) {

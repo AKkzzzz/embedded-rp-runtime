@@ -236,7 +236,7 @@
     var rows = entries.map(function (entry) {
       return '<div class="data-row"><div><strong>' + escapeHtml(entry.name) + '</strong><div class="tiny">' + escapeHtml(entry.id) + '</div></div>' +
         '<div><div>' + escapeHtml(triggerSummary(entry)) + '</div><div class="tiny">依赖 ' + escapeHtml((entry.dependencies || []).join(', ') || '无') + ' · ' + escapeHtml(entry.placement) + '</div></div>' +
-        '<button type="button" class="toggle" data-worldbook-toggle="' + escapeHtml(entry.id) + '">' + (entry.runtimeEnabled ? '启用' : '关闭') + '</button></div>';
+        '<div><button type="button" class="toggle" data-worldbook-toggle="' + escapeHtml(entry.id) + '">' + (entry.runtimeEnabled ? '启用' : '关闭') + '</button>' + (entry.source === 'user' || entry.source === 'imported' ? '<button type="button" class="toggle" data-worldbook-edit="' + escapeHtml(entry.id) + '">编辑</button>' : '') + '</div></div>';
     }).join('');
     var resultHtml = result ? '<article class="debug-card wide"><p class="eyebrow">SCAN RESULT</p><h3>命中 ' + result.hits.length + ' 条 · ' + result.usedChars + ' 字符</h3><pre>' +
       escapeHtml(JSON.stringify({ hits: result.hits, diagnostics: result.diagnostics }, null, 2)) + '</pre></article>' : '';
@@ -245,13 +245,13 @@
       '兼容 RP-Hub 的历史扫描、概率与七类位置；显式依赖可递归展开，并受深度、去重和可选预算限制。',
       '<button type="button" class="secondary" id="importWorldbook">导入 RP-Hub</button>' +
       '<input id="worldbookImportFile" type="file" accept=".json,application/json" hidden>' +
-      '<button type="button" class="secondary" id="exportWorldbook">导出全部</button>'
+      '<button type="button" class="secondary" id="exportWorldbook">导出全部</button><button type="button" class="secondary" id="newWorldbookEntry">新增本地条目</button>'
     ) +
       '<div class="card-grid" style="margin-bottom:10px"><article class="debug-card"><div class="metric"><span>知识库修订</span><strong>' + knowledge.revision + '</strong></div></article>' +
       '<article class="debug-card"><div class="metric"><span>运行时条目</span><strong>' + knowledge.entries.length + '</strong></div></article>' +
       '<article class="debug-card"><div class="metric"><span>待审提案</span><strong>' + proposals.filter(function (item) { return item.status === 'pending'; }).length + '</strong></div></article></div>' +
       '<div class="control-line"><input id="worldbookQuery" value="我想检查世界书递归扫描" aria-label="模拟扫描文本"><button id="scanWorldbook">模拟扫描</button></div>' +
-      '<div class="debug-card"><div class="row-list">' + rows + '</div></div><div class="card-grid">' + resultHtml + '</div>';
+      '<div class="debug-card"><div class="row-list">' + rows + '</div></div><div class="debug-card" id="worldbookEditor" hidden><div class="control-line"><input id="worldbookEditName" placeholder="条目名称"><input id="worldbookEditKeys" placeholder="关键词，用逗号分隔"></div><textarea id="worldbookEditContent" rows="8" style="width:100%" placeholder="条目内容"></textarea><div class="control-line"><button id="saveWorldbookEntry" class="primary">保存本地条目</button><button id="removeWorldbookEntry" class="secondary">删除</button></div></div><div class="card-grid">' + resultHtml + '</div>';
     target.querySelector('#importWorldbook').onclick = function () {
       target.querySelector('#worldbookImportFile').click();
     };
@@ -269,6 +269,24 @@
     target.querySelector('#exportWorldbook').onclick = function () {
       downloadJson('worldbook.json', { entries: window.RPWorldbook.exportRpHub() });
     };
+    var editor = target.querySelector('#worldbookEditor');
+    var editingId = '';
+    function openEditor(entry) {
+      editingId = entry && entry.id || '';
+      editor.hidden = false;
+      target.querySelector('#worldbookEditName').value = entry ? entry.name : '';
+      target.querySelector('#worldbookEditKeys').value = entry ? (entry.keys || []).join(', ') : '';
+      target.querySelector('#worldbookEditContent').value = entry ? entry.content : '';
+    }
+    target.querySelector('#newWorldbookEntry').onclick = function () { openEditor(null); };
+    target.querySelectorAll('[data-worldbook-edit]').forEach(function (button) { button.onclick = function () { var entry = window.RPWorldbook.byId(button.dataset.worldbookEdit); if (entry && entry.source !== 'user' && entry.source !== 'imported') return; openEditor(entry); }; });
+    target.querySelector('#saveWorldbookEntry').onclick = function () {
+      var data = { name: target.querySelector('#worldbookEditName').value.trim(), content: target.querySelector('#worldbookEditContent').value.trim(), keys: target.querySelector('#worldbookEditKeys').value.split(/[,，]/).map(function (v) { return v.trim(); }).filter(Boolean), trigger: { type: 'literal', keys: target.querySelector('#worldbookEditKeys').value.split(/[,，]/).map(function (v) { return v.trim(); }).filter(Boolean) } };
+      var result = editingId ? window.RPWorldbookPatches.updateLocal(editingId, data) : window.RPWorldbookPatches.createLocal(data);
+      if (!result.ok) { window.RPDialog.alert('保存失败：' + result.errors.join('；')); return; }
+      renderWorldbook();
+    };
+    target.querySelector('#removeWorldbookEntry').onclick = function () { if (!editingId) return; var result = window.RPWorldbookPatches.removeLocal(editingId); if (!result.ok) window.RPDialog.alert(result.errors.join('；')); else renderWorldbook(); };
     target.querySelectorAll('[data-worldbook-toggle]').forEach(function (button) {
       button.onclick = function () {
         var entry = window.RPWorldbook.byId(button.dataset.worldbookToggle);
@@ -343,6 +361,7 @@
     var vectorStats = window.RPVectorMemory.stats();
     var preferences = window.RPStorage.getPreferences();
     var memorySettings = Object.assign({
+      memoryMode: 'classic',
       vectorEnabled: false,
       summaryEnabled: false,
       inheritRpHub: true,
@@ -351,6 +370,8 @@
       patrolIntervalMs: 60000,
       retryEnabled: true,
       maxRetryAttempts: 6,
+      summaryKeepFloors: 40,
+      vectorKeepFloors: 40,
       maxHistoryFloors: 40,
       topK: 10,
       similarityThreshold: 0.5,
@@ -369,27 +390,29 @@
       '<article class="debug-card"><div class="metric"><span>向量</span><strong>' + vectorStats.total + '</strong></div><p class="tiny">Int8 · 约 ' + vectorStats.estimatedBytes + ' bytes，未量化约 ' + vectorStats.float32EquivalentBytes + ' bytes</p></article>' +
       '<article class="debug-card"><div class="metric"><span>重试队列</span><strong>' + vectorStats.pending + '</strong></div><p class="tiny">失败 ' + vectorStats.failed + ' · ' + (vectorStats.patrolRunning ? '巡检中' : '待机') + '</p></article>' +
       '<article class="debug-card wide"><div class="card-grid">' +
-        '<label class="field"><span>向量召回</span><input type="checkbox" id="vectorEnabled" ' + (memorySettings.vectorEnabled ? 'checked' : '') + '><small>使用 RP-Hub embedding 模型建立卡内向量库</small></label>' +
+        '<label class="field"><span>记忆模式</span><select id="memoryMode"><option value="classic" ' + (memorySettings.memoryMode !== 'vector' ? 'selected' : '') + '>classic 总结</option><option value="vector" ' + (memorySettings.memoryMode === 'vector' ? 'selected' : '') + '>vector 向量</option></select><small>两者互斥，只启用一种长期记忆</small></label>' +
         '<label class="field"><span>自动建立向量</span><input type="checkbox" id="autoIndex" ' + (memorySettings.autoIndex ? 'checked' : '') + '><small>回复完成后后台批量处理，不参与流式过程</small></label>' +
         '<label class="field"><span>后台巡检</span><input type="checkbox" id="patrolEnabled" ' + (memorySettings.patrolEnabled ? 'checked' : '') + '><small>定期扫描已完成楼层，补齐漏掉的向量</small></label>' +
         '<label class="field"><span>失败自动重试</span><input type="checkbox" id="retryEnabled" ' + (memorySettings.retryEnabled ? 'checked' : '') + '><small>接口失败后使用指数退避，最多重试指定次数</small></label>' +
         '<label class="field"><span>巡检间隔（秒）</span><input id="patrolIntervalMs" type="number" min="15" max="3600" value="' + Math.round(Number(memorySettings.patrolIntervalMs || 60000) / 1000) + '"><small>默认60秒，最低15秒</small></label>' +
         '<label class="field"><span>最大重试次数</span><input id="maxRetryAttempts" type="number" min="1" max="12" value="' + Number(memorySettings.maxRetryAttempts || 6) + '"><small>超过后进入失败队列，可手动重试</small></label>' +
-        '<label class="field"><span>历史保留楼层</span><input id="maxHistoryFloors" type="number" min="0" max="200" value="' + Number(memorySettings.maxHistoryFloors) + '"><small>0 表示不裁剪；默认 40</small></label>' +
-        '<label class="field"><span>总结模块</span><input type="checkbox" id="summaryEnabled" ' + (memorySettings.summaryEnabled ? 'checked' : '') + '><small>使用总结 route 压缩旧历史，默认继承平衡模型</small></label>' +
+        '<label class="field"><span>总结保留楼层</span><input id="summaryKeepFloors" type="number" min="0" max="200" value="' + Number(memorySettings.summaryKeepFloors || 40) + '"><small>classic 模式使用</small></label>' +
+        '<label class="field"><span>向量保留楼层</span><input id="vectorKeepFloors" type="number" min="0" max="200" value="' + Number(memorySettings.vectorKeepFloors || 40) + '"><small>vector 模式使用</small></label>' +
         '<label class="field"><span>总结并发数</span><input id="summaryConcurrency" type="number" min="1" max="10" value="' + Number(memorySettings.summaryConcurrency || 5) + '"><small>与 RP-Hub 一致，后台补录缺失的逐轮总结</small></label>' +
       '</div><div class="control-line" style="margin-top:10px"><button id="saveMemorySettings" class="primary">保存记忆设置</button><button id="runVectorPatrol" class="secondary">立即巡检</button><button id="retryVectorQueue" class="secondary">重试失败队列</button><span class="tiny" id="memorySettingsStatus">当前默认继承 RP-Hub</span></div></article>' +
       '<article class="debug-card wide"><div class="row-list">' + rows + '</div></article></div>';
     target.querySelector('#saveMemorySettings').onclick = function () {
       var next = Object.assign({}, memorySettings, {
-        vectorEnabled: target.querySelector('#vectorEnabled').checked,
+        memoryMode: target.querySelector('#memoryMode').value,
+        vectorEnabled: target.querySelector('#memoryMode').value === 'vector',
         autoIndex: target.querySelector('#autoIndex').checked,
-        summaryEnabled: target.querySelector('#summaryEnabled').checked,
+        summaryEnabled: target.querySelector('#memoryMode').value === 'classic',
         patrolEnabled: target.querySelector('#patrolEnabled').checked,
         retryEnabled: target.querySelector('#retryEnabled').checked,
         patrolIntervalMs: Math.max(15000, Math.min(3600000, (Number(target.querySelector('#patrolIntervalMs').value) || 60) * 1000)),
         maxRetryAttempts: Math.max(1, Math.min(12, Number(target.querySelector('#maxRetryAttempts').value) || 6)),
-        maxHistoryFloors: Math.max(0, Math.min(200, Number(target.querySelector('#maxHistoryFloors').value) || 0)),
+        summaryKeepFloors: Math.max(0, Math.min(200, Number(target.querySelector('#summaryKeepFloors').value) || 0)),
+        vectorKeepFloors: Math.max(0, Math.min(200, Number(target.querySelector('#vectorKeepFloors').value) || 0)),
         summaryConcurrency: Math.max(1, Math.min(10, Number(target.querySelector('#summaryConcurrency').value) || 5)),
         inheritRpHub: true
       });
