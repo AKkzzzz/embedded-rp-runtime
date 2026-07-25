@@ -11,7 +11,7 @@
 - 流式模型调用、停止、继续、重生成、编辑、删除、清空楼层，以及清档竞态保护；
 - 可配置历史保留策略（当前模板默认 40 楼）、结构化总结和 Int8 向量记忆；
 - 后台向量巡检、失败重试队列和本地 IndexedDB 存储；
-- 按 `storagePrefix` 隔离的向量库，以及只索引保留楼层之外冷历史的入库策略；
+- 按 `storagePrefix` 隔离的向量库；从首个完整回合开始入库，近期原文窗口不参与向量召回；
 - 状态 schema、世界书补丁审批和版本冲突检查；
 - 插件生命周期、能力声明、依赖排序、启停和错误隔离；
 - RPG 状态、白名单命令、变量浮层、动态 Lore、WebLLM 和媒体能力适配器；
@@ -72,7 +72,7 @@ RPConversation.whenStateSettled()
 - `RPMemory.searchStructured/searchVectors`
 - `RPSummary.contextHistory/summarize`
 - `RPVectorMemory.patrol/retryQueue/stats`
-- `RPVectorMemory.archivedMessages/clearAll`
+- `RPVectorMemory.indexableMessages/retainedTurnSet/clearAll`
 - `RPMemory.reset`
 
 卡内世界书是作者内容和模型提案的边界；向量和总结只是检索辅助，不得覆盖 canonical state。

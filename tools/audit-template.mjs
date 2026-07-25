@@ -43,7 +43,8 @@ const sourceContracts = [
   ['ui/runtime/tool-engine.js', ['function callKey', "status: 'duplicate'"], []],
   ['ui/runtime/vector-memory-engine.js', [
     "window.RPTemplateData.app.storagePrefix + ':vectors:v1'",
-    'function archivedMessages',
+    'function indexableMessages',
+    'function retainedTurnSet',
     'clearAll: clearAll'
   ], ["var dbName = 'nanami_embedded_rp_vectors_v1'"]],
   ['ui/runtime/ui-template-state.js', ['var lastTrace', 'trace: function', 'var latest = window.RPStorage.getCanonical()'], []],
@@ -91,7 +92,8 @@ for (const needle of [
   'function callKey',
   "status: 'duplicate'",
   "storagePrefix + ':vectors:v1'",
-  'function archivedMessages',
+  'function indexableMessages',
+  'function retainedTurnSet',
   'function makeDraggable',
   'testEmbeddingModel'
 ]) {

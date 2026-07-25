@@ -188,21 +188,24 @@ sandbox.RPStorage.savePreferences({ memoryModules: {
   topK: 10,
   similarityThreshold: 0.5
 } });
-responses.push(new Response(JSON.stringify({ data: [
-  { index: 0, embedding: [1, 0, 0] },
-  { index: 1, embedding: [0.9, 0.1, 0] }
-] }), { status: 200, headers: { 'content-type': 'application/json' } }));
-assert.equal((await sandbox.RPVectorMemory.indexMessages([
+const vectorConversation = [
   { role: 'user', content: '旧港口的钟声' },
   { role: 'assistant', content: '我们记住了旧港口。' },
   { role: 'user', content: '仍在眼前的新现场' },
   { role: 'assistant', content: '这部分应保留为近期原文。' }
-])).added, 2);
-assert.equal(sandbox.RPVectorMemory.stats().coldFloorThreshold, 1);
-assert.equal(sandbox.RPVectorMemory.archivedMessages([
+];
+sandbox.RPConversation = { list: () => vectorConversation };
+responses.push(new Response(JSON.stringify({ data: [0, 1, 2, 3].map(index => ({
+  index, embedding: index < 2 ? [1 - index * 0.1, index * 0.1, 0] : [0, 1, index]
+})) }), { status: 200, headers: { 'content-type': 'application/json' } }));
+assert.equal((await sandbox.RPVectorMemory.indexMessages(vectorConversation)).added, 4);
+assert.equal(sandbox.RPVectorMemory.stats().indexFromFloor, 0);
+assert.equal(sandbox.RPVectorMemory.stats().indexedFloors, 2);
+assert.equal(sandbox.RPVectorMemory.stats().recallExcludedFloors, 1);
+assert.equal(sandbox.RPVectorMemory.indexableMessages([
   { role: 'user', content: '旧' }, { role: 'assistant', content: '旧回复' },
   { role: 'user', content: '新' }, { role: 'assistant', content: '新回复' }
-], 1).length, 2);
+]).length, 4);
 responses.push(new Response(JSON.stringify({ data: [{ index: 0, embedding: [1, 0, 0] }] }), {
   status: 200, headers: { 'content-type': 'application/json' }
 }));
@@ -315,7 +318,7 @@ console.log(JSON.stringify({
   jsonFallback: jsonResult.content,
   conversationOperations: true,
   clearRaceGuard: true,
-  coldVectorHistory: true,
+  fullVectorIndexWithRecentRecallExclusion: true,
   isolatedReset: true,
   secretLeak: false
 }, null, 2));

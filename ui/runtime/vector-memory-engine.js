@@ -313,11 +313,17 @@
     return turns;
   }
 
-  function archivedMessages(messages, keepFloors) {
-    var turns = completeTurns(messages);
+  function indexableMessages(messages) {
+    return completeTurns(messages).reduce(function (output, turn) { return output.concat(turn); }, []);
+  }
+
+  function retainedTurnSet(messages, keepFloors) {
+    var count = completeTurns(messages).length;
     var keep = Math.max(0, Number(keepFloors) || 0);
-    var archived = keep > 0 ? turns.slice(0, -keep) : turns;
-    return archived.reduce(function (output, turn) { return output.concat(turn); }, []);
+    var first = Math.max(1, count - keep + 1);
+    var retained = new Set();
+    for (var turn = first; turn <= count; turn += 1) retained.add(turn);
+    return retained;
   }
 
   async function embedChunks(chunks, options) {
@@ -339,16 +345,16 @@
     var settings = prefs();
     if (!settings.vectorEnabled || settings.autoIndex === false) return { ok: false, skipped: true, added: 0 };
     var floors = completeTurns(messages).length;
-    var keep = Math.max(0, Number(settings.maxHistoryFloors) || 0);
-    var chunks = buildChunks(archivedMessages(messages, keep));
+    var chunks = buildChunks(indexableMessages(messages));
     if (!chunks.length) {
       return {
         ok: true,
         added: 0,
         total: memory.length,
         conversationFloors: floors,
-        coldFloorThreshold: keep,
-        waitingForFloors: Math.max(0, keep + 1 - floors)
+        indexFromFloor: 0,
+        indexedFloors: floors,
+        waitingForFloors: floors ? 0 : 1
       };
     }
     try {
@@ -420,7 +426,9 @@
     }
     var queryVector = vectors[0];
     var terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
-    return memory.map(function (item) {
+    var messages = window.RPConversation && window.RPConversation.list ? window.RPConversation.list() : [];
+    var retained = retainedTurnSet(messages, settings.maxHistoryFloors);
+    return memory.filter(function (item) { return !retained.has(Number(item.turn || 0)); }).map(function (item) {
       var score = cosine(queryVector, item.embedding);
       var hits = terms.filter(function (term) { return item.sourceText.toLowerCase().includes(term); });
       return { item: item, score: score + Math.min(0.08, hits.length * 0.015) };
@@ -444,6 +452,7 @@
       var messages = window.RPConversation && window.RPConversation.list ? window.RPConversation.list() : [];
       var floors = completeTurns(messages).length;
       var keep = Math.max(0, Number(prefs().maxHistoryFloors) || 0);
+      var indexedTurns = new Set(memory.map(function (item) { return Number(item.turn || 0); }).filter(Boolean));
       var dims = memory.reduce(function (sum, item) { return sum + Number(item.embeddingDims || item.embedding && item.embedding.length || 0); }, 0);
       var packedBytes = memory.reduce(function (sum, item) {
         return sum + (typeof item.embeddingQ === 'string' ? Math.ceil(item.embeddingQ.length * 0.75) : Number(item.embedding && item.embedding.byteLength || 0));
@@ -456,13 +465,16 @@
         float32EquivalentBytes: dims * 4,
         patrolRunning: patrolRunning,
         conversationFloors: floors,
-        coldFloorThreshold: keep,
-        eligibleFloors: Math.max(0, floors - keep),
-        waitingForFloors: Math.max(0, keep + 1 - floors),
+        indexFromFloor: 0,
+        indexedFloors: indexedTurns.size,
+        recallExcludedFloors: Math.min(floors, keep),
+        recallEligibleFloors: Math.max(0, floors - keep),
+        waitingForFloors: floors ? 0 : 1,
         embeddingModel: (window.RPHost.settings() || {}).embeddingModel || ''
       }, queueStats());
     },
-    archivedMessages: archivedMessages,
+    indexableMessages: indexableMessages,
+    retainedTurnSet: retainedTurnSet,
     quantize: quantize,
     decode: base64ToInt8,
     cosine: cosine

@@ -363,7 +363,7 @@
     }).join('');
     target.innerHTML = pageHead(
       '结构化记忆与向量索引',
-      '向量和总结默认关闭；开启后继承 RP-Hub 当前已选择的 embedding/平衡模型，不另填 API。历史超过保留楼层后，Prompt 只带最近楼层，旧内容通过向量和总结召回。'
+      '向量和总结默认关闭；开启后继承 RP-Hub 当前已选择的 embedding/平衡模型，不另填 API。向量从首个完整回合开始入库；近期保留楼层不参与召回，超过窗口后才可能作为长期记忆注入 Prompt。'
     ) +
       '<div class="card-grid"><article class="debug-card"><div class="metric"><span>结构化</span><strong>' + stats.structured + '</strong></div></article>' +
       '<article class="debug-card"><div class="metric"><span>向量</span><strong>' + vectorStats.total + '</strong></div><p class="tiny">Int8 · 约 ' + vectorStats.estimatedBytes + ' bytes，未量化约 ' + vectorStats.float32EquivalentBytes + ' bytes</p></article>' +
