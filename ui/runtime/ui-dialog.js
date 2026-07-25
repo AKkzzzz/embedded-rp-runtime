@@ -39,7 +39,10 @@
       overlay.addEventListener('mousedown', function (event) { if (event.target === overlay) finish(false); });
       document.addEventListener('keydown', onKeydown, true);
       activeFinish = finish;
-      document.body.appendChild(overlay);
+      // Fullscreen promotes only the fullscreen element into the top layer.
+      // Keep dialogs inside it so alerts remain visible and clickable.
+      var dialogRoot = document.fullscreenElement || document.getElementById('runtimeShell') || document.body;
+      dialogRoot.appendChild(overlay);
       ok.focus();
     });
   }
