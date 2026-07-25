@@ -6,6 +6,14 @@
   var stateSyncPending = Promise.resolve();
   var generationEpoch = 0;
   var lastNarrativeTrace = null;
+  var storagePrefix = window.RPTemplateData.app.storagePrefix;
+  var conversationDbName = storagePrefix + ':conversation:v1';
+  var conversationDbPromise = null;
+  var conversationReady = null;
+  var conversationWriteQueue = Promise.resolve();
+  var initialConversation = window.RPStorage.getCanonical().conversation || { revision: 1, messages: [], status: 'idle' };
+  var committedMessages = clone(initialConversation.messages || []);
+  var committedRevision = Number(initialConversation.revision || 1);
 
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -38,17 +46,85 @@
   }
 
   function canonicalConversation() {
-    return window.RPStorage.getCanonical().conversation;
+    var meta = window.RPStorage.getCanonical().conversation || {};
+    return Object.assign({}, meta, { revision: committedRevision, messages: clone(committedMessages) });
+  }
+
+  function openConversationDb() {
+    if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+    if (conversationDbPromise) return conversationDbPromise;
+    conversationDbPromise = new Promise(function (resolve, reject) {
+      var request = indexedDB.open(conversationDbName, 1);
+      request.onupgradeneeded = function () {
+        if (!request.result.objectStoreNames.contains('conversation')) request.result.createObjectStore('conversation');
+      };
+      request.onsuccess = function () { resolve(request.result); };
+      request.onerror = function () { reject(request.error || new Error('conversation database unavailable')); };
+    });
+    return conversationDbPromise;
+  }
+
+  async function readConversationStore() {
+    var db = await openConversationDb();
+    if (!db) return null;
+    return new Promise(function (resolve, reject) {
+      var request = db.transaction('conversation', 'readonly').objectStore('conversation').get('history');
+      request.onsuccess = function () { resolve(request.result || null); };
+      request.onerror = function () { reject(request.error || new Error('conversation read failed')); };
+    });
+  }
+
+  async function writeConversationStore(record) {
+    var db = await openConversationDb();
+    if (!db) return;
+    await new Promise(function (resolve, reject) {
+      var request = db.transaction('conversation', 'readwrite').objectStore('conversation').put(record, 'history');
+      request.onsuccess = function () { resolve(); };
+      request.onerror = function () { reject(request.error || new Error('conversation write failed')); };
+    });
+  }
+
+  function scheduleConversationWrite() {
+    var record = { revision: committedRevision, messages: clone(committedMessages), savedAt: now() };
+    conversationWriteQueue = conversationWriteQueue.catch(function () { return null; })
+      .then(function () { return writeConversationStore(record); })
+      .catch(function (error) {
+        window.RPEvents.emit('conversation:storage:error', { message: String(error.message || error) });
+      });
+    return conversationWriteQueue;
+  }
+
+  function init() {
+    if (conversationReady) return conversationReady;
+    conversationReady = readConversationStore().then(function (stored) {
+      if (stored && Array.isArray(stored.messages) && Number(stored.revision || 0) >= committedRevision) {
+        committedMessages = clone(stored.messages);
+        committedRevision = Number(stored.revision || committedRevision);
+      }
+      persist(committedMessages, initialConversation.status === 'generating' ? 'idle' : initialConversation.status);
+      return conversationWriteQueue;
+    }).then(function () { return clone(committedMessages); });
+    return conversationReady;
   }
 
   function persist(messages, status) {
     var state = window.RPStorage.getCanonical();
+    committedMessages = clone(messages);
+    committedRevision = Math.max(committedRevision, Number(state.conversation && state.conversation.revision || 1)) + 1;
+    var configured = window.RPStorage.getPreferences().memoryModules || {};
+    var recentFloors = Math.max(1, Number(configured.maxHistoryFloors) || 40);
+    var canonicalMessages = typeof indexedDB === 'undefined'
+      ? committedMessages
+      : committedMessages.slice(-recentFloors * 2);
     state.conversation = {
-      revision: Number(state.conversation.revision || 1) + 1,
-      messages: clone(messages),
+      revision: committedRevision,
+      messages: clone(canonicalMessages),
+      totalMessages: committedMessages.length,
+      archivedMessages: Math.max(0, committedMessages.length - recentFloors * 2),
       status: status || 'idle'
     };
     window.RPStorage.saveCanonical(state);
+    scheduleConversationWrite();
     return clone(state.conversation);
   }
 
@@ -319,6 +395,8 @@
   }
 
   window.RPConversation = {
+    init: init,
+    flush: function () { return conversationWriteQueue; },
     list: visible,
     committed: function () { return clone(canonicalConversation().messages); },
     isGenerating: function () { return Boolean(active); },
@@ -335,6 +413,8 @@
       var conversation = canonicalConversation();
       return {
         messages: conversation.messages.length,
+        totalMessages: committedMessages.length,
+        storage: typeof indexedDB === 'undefined' ? 'canonical-fallback' : 'indexedDB',
         status: conversation.status,
         activeMode: active && active.mode || ''
       };

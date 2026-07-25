@@ -81,9 +81,9 @@ Conversation Engine 为每轮工具续写维护调用键集合。相同工具名
 - authored：世界书、预设、schema 和插件清单；
 - local：当前标签、主题、调试过滤器等纯显示偏好。
 
-localStorage 只保存小型偏好。长历史、向量和版本日志进入 IndexedDB。任何 canonical 修改使用事务和版本号。
+localStorage 只保存小型偏好和近期 Canonical 索引。完整聊天历史、逐轮总结、向量和版本日志进入按卡隔离的 IndexedDB。任何 canonical 修改使用事务和版本号。
 
-当前 Debug 模板先用 localStorage 验证聊天闭环；流式草稿只驻留内存，完成、停止或失败后才落盘，避免每个 token 都写存储。生产应用在长历史阶段迁移到 IndexedDB。
+流式草稿只驻留内存，完成、停止或失败后才落盘，避免每个 token 都写存储。聊天引擎将完整历史写入 IndexedDB，Canonical/localStorage 仅保留近期楼层和索引；不支持 IndexedDB 时才回退为完整 Canonical。
 
 ### Task Queue
 

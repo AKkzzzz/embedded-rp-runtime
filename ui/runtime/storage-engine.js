@@ -59,7 +59,8 @@
         maxHistoryFloors: 40,
         topK: 10,
         similarityThreshold: 0.5,
-        summaryEveryFloors: 10,
+        summaryConcurrency: 5,
+        summaryPolicyVersion: 1,
         maxVectors: 2000
       }
     };
@@ -72,6 +73,14 @@
       maxHistoryFloors: 40,
       historyPolicyVersion: 2
     });
+    try { localStorage.setItem(preferencesKey, JSON.stringify(preferences)); } catch (_error) {}
+  }
+  if (!preferences.memoryModules || preferences.memoryModules.summaryPolicyVersion !== 1) {
+    preferences.memoryModules = Object.assign({}, preferences.memoryModules || {}, {
+      summaryConcurrency: 5,
+      summaryPolicyVersion: 1
+    });
+    delete preferences.memoryModules.summaryEveryFloors;
     try { localStorage.setItem(preferencesKey, JSON.stringify(preferences)); } catch (_error) {}
   }
 
@@ -90,11 +99,17 @@
   }
 
   function exportBundle() {
+    var exportedCanonical = clone(canonical);
+    if (window.RPConversation && window.RPConversation.committed) {
+      exportedCanonical.conversation.messages = window.RPConversation.committed();
+      exportedCanonical.conversation.totalMessages = exportedCanonical.conversation.messages.length;
+      exportedCanonical.conversation.archivedMessages = 0;
+    }
     return {
       format: 'embedded-rp-runtime-save',
       version: 1,
       app: clone(data.app),
-      canonical: clone(canonical),
+      canonical: exportedCanonical,
       preferences: clone(preferences),
       authoredRevision: 1,
       exportedAt: new Date().toISOString()
@@ -123,6 +138,7 @@
         ownedKeys = [stateKey, preferencesKey, prefix + ':timeline', prefix + ':vector-retry-queue', prefix + ':structured-memory'];
       }
       ownedKeys.forEach(function (key) { localStorage.removeItem(key); });
+      if (window.RPConversation && window.RPConversation.clear) window.RPConversation.clear().catch(function () {});
       canonical = clone(data.initialState);
       preferences = preferenceDefaults();
       localStorage.setItem(stateKey, JSON.stringify(canonical));

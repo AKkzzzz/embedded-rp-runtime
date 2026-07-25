@@ -145,6 +145,8 @@
       conversation: {
         revision: 1,
         messages: [],
+        totalMessages: 0,
+        archivedMessages: 0,
         status: 'idle'
       },
       knowledge: {
@@ -205,6 +207,8 @@
           properties: {
             revision: { type: 'integer', minimum: 1, readOnly: true },
             status: { type: 'string', enum: ['idle', 'generating'] },
+            totalMessages: { type: 'integer', minimum: 0, readOnly: true },
+            archivedMessages: { type: 'integer', minimum: 0, readOnly: true },
             messages: {
               type: 'array',
               items: {

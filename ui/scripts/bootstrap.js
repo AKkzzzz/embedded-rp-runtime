@@ -18,6 +18,8 @@
 
     var caps = await window.RPHost.detect();
     await window.RPPlugins.activateAll();
+    await window.RPConversation.init();
+    await window.RPMemory.init();
     await window.RPVectorMemory.init();
     var hostChip = document.getElementById('hostChip');
     hostChip.textContent = caps.sameOriginSettings ? 'RP-Hub 配置已接入' : '等待 RP-Hub API 设置';

@@ -127,10 +127,10 @@
     var retrievalOptions = Object.assign({ history: options.history }, options.worldbook, { state: options.state });
     var retrieval = window.RPWorldbook.retrieve(input, retrievalOptions);
     var groups = groupHits(retrieval.hits);
-    var memories = window.RPMemory.searchStructured(input, { topK: options.memoryTopK });
-    var summaries = window.RPMemory.listStructured().filter(function (memory) {
-      return (memory.kind === 'summary' || memory.kind === 'classicMemory') && memory.stale !== true;
-    }).slice(-12);
+    var memories = window.RPMemory.searchStructured(input, { topK: options.memoryTopK }).filter(function (memory) {
+      return memory.kind !== 'summary' && memory.kind !== 'classicMemory' && memory.classicMemory !== true;
+    });
+    var summaries = [];
     var vectorMemories = await window.RPMemory.searchVectors(input, { signal: options.signal });
     var presetGroups = window.RPPresets.compile();
     var messages = [];

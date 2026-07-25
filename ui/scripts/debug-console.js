@@ -354,7 +354,7 @@
       maxHistoryFloors: 40,
       topK: 10,
       similarityThreshold: 0.5,
-      summaryEveryFloors: 10,
+      summaryConcurrency: 5,
       maxVectors: 2000
     }, preferences.memoryModules || {});
     var rows = window.RPMemory.listStructured().map(function (memory) {
@@ -377,7 +377,7 @@
         '<label class="field"><span>最大重试次数</span><input id="maxRetryAttempts" type="number" min="1" max="12" value="' + Number(memorySettings.maxRetryAttempts || 6) + '"><small>超过后进入失败队列，可手动重试</small></label>' +
         '<label class="field"><span>历史保留楼层</span><input id="maxHistoryFloors" type="number" min="0" max="200" value="' + Number(memorySettings.maxHistoryFloors) + '"><small>0 表示不裁剪；默认 40</small></label>' +
         '<label class="field"><span>总结模块</span><input type="checkbox" id="summaryEnabled" ' + (memorySettings.summaryEnabled ? 'checked' : '') + '><small>使用总结 route 压缩旧历史，默认继承平衡模型</small></label>' +
-        '<label class="field"><span>每隔多少楼总结</span><input id="summaryEveryFloors" type="number" min="2" max="100" value="' + Number(memorySettings.summaryEveryFloors) + '"><small>总结只在超过保留楼层后触发</small></label>' +
+        '<label class="field"><span>总结并发数</span><input id="summaryConcurrency" type="number" min="1" max="10" value="' + Number(memorySettings.summaryConcurrency || 5) + '"><small>与 RP-Hub 一致，后台补录缺失的逐轮总结</small></label>' +
       '</div><div class="control-line" style="margin-top:10px"><button id="saveMemorySettings" class="primary">保存记忆设置</button><button id="runVectorPatrol" class="secondary">立即巡检</button><button id="retryVectorQueue" class="secondary">重试失败队列</button><span class="tiny" id="memorySettingsStatus">当前默认继承 RP-Hub</span></div></article>' +
       '<article class="debug-card wide"><div class="row-list">' + rows + '</div></article></div>';
     target.querySelector('#saveMemorySettings').onclick = function () {
@@ -390,7 +390,7 @@
         patrolIntervalMs: Math.max(15000, Math.min(3600000, (Number(target.querySelector('#patrolIntervalMs').value) || 60) * 1000)),
         maxRetryAttempts: Math.max(1, Math.min(12, Number(target.querySelector('#maxRetryAttempts').value) || 6)),
         maxHistoryFloors: Math.max(0, Math.min(200, Number(target.querySelector('#maxHistoryFloors').value) || 0)),
-        summaryEveryFloors: Math.max(2, Math.min(100, Number(target.querySelector('#summaryEveryFloors').value) || 10)),
+        summaryConcurrency: Math.max(1, Math.min(10, Number(target.querySelector('#summaryConcurrency').value) || 5)),
         inheritRpHub: true
       });
       window.RPStorage.savePreferences({ memoryModules: next });

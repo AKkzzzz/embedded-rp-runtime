@@ -39,7 +39,9 @@ const inner = zlib.gunzipSync(Buffer.from(encoded, 'base64')).toString('utf8');
 
 const sourceContracts = [
   ['ui/runtime/prompt-compiler.js', ["source: 'state:variables'"], ["source: 'state:canonical'"]],
-  ['ui/runtime/conversation-engine.js', ['generationEpoch', 'whenStateSettled', 'committed:', 'else if (window.RPUIStateSync)'], []],
+  ['ui/runtime/conversation-engine.js', ['generationEpoch', 'whenStateSettled', 'committed:', 'conversation:v1', 'totalMessages'], []],
+  ['ui/runtime/memory-engine.js', ['structured-memory:v1', 'function init', 'function removeStructured'], []],
+  ['ui/runtime/summary-engine.js', ['summaryConcurrency', 'function buildJobs', 'function contextHistory'], []],
   ['ui/runtime/tool-engine.js', ['function callKey', "status: 'duplicate'"], []],
   ['ui/runtime/vector-memory-engine.js', [
     "window.RPTemplateData.app.storagePrefix + ':vectors:v1'",
