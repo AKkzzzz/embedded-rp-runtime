@@ -190,8 +190,7 @@
         }).catch(function (error) {
           window.RPEvents.emit('state:sync', { ok: false, source: 'state-model', reason: String(error.message || error) });
         });
-      }
-      if (window.RPUIStateSync) {
+      } else if (window.RPUIStateSync) {
         stateSyncPending = stateSyncPending.then(function () {
           return window.RPUIStateSync.updateFromChat(finalMessages);
         }).catch(function (error) {

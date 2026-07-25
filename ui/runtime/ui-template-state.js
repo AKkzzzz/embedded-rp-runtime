@@ -141,8 +141,11 @@
       window.RPEvents.emit('ui-template:sync', { ok: true, changed: [] });
       return { ok: true, changed: [] };
     }
+    // Rebase UI-only changes onto the latest canonical state. Other runtime
+    // components may have committed deterministic state while this request ran.
+    var latest = window.RPStorage.getCanonical();
     var patched = window.RPStateGuard.applyPatch(
-      state,
+      latest,
       { uiTemplates: templates },
       window.RPTemplateData.stateSchema
     );

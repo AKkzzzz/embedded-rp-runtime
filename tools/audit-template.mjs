@@ -39,14 +39,14 @@ const inner = zlib.gunzipSync(Buffer.from(encoded, 'base64')).toString('utf8');
 
 const sourceContracts = [
   ['ui/runtime/prompt-compiler.js', ["source: 'state:variables'"], ["source: 'state:canonical'"]],
-  ['ui/runtime/conversation-engine.js', ['generationEpoch', 'whenStateSettled', 'committed:'], []],
+  ['ui/runtime/conversation-engine.js', ['generationEpoch', 'whenStateSettled', 'committed:', 'else if (window.RPUIStateSync)'], []],
   ['ui/runtime/tool-engine.js', ['function callKey', "status: 'duplicate'"], []],
   ['ui/runtime/vector-memory-engine.js', [
     "window.RPTemplateData.app.storagePrefix + ':vectors:v1'",
     'function archivedMessages',
     'clearAll: clearAll'
   ], ["var dbName = 'nanami_embedded_rp_vectors_v1'"]],
-  ['ui/runtime/ui-template-state.js', ['var lastTrace', 'trace: function'], []],
+  ['ui/runtime/ui-template-state.js', ['var lastTrace', 'trace: function', 'var latest = window.RPStorage.getCanonical()'], []],
   ['ui/runtime/capability-plugins.js', [
     'function makeDraggable',
     'data-cap-expand',

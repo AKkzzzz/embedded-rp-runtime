@@ -171,3 +171,5 @@ Prompt Compiler 使用 canonical `player.name` 解析 `{{user}}`，使用当前�
 embedding 路由默认继承 RP-Hub 的记忆设置。卡内覆盖选择器只列出具有 embedding/向量特征的模型；保存覆盖前必须对 `/embeddings` 做一次小型能力探测并取得合法向量。模型名称筛选只负责减少误选，接口探测才是最终能力判断。
 
 RP-Hub UI Template 状态副模型由 `RPUIStateSync` 对齐：只读取已完成对话、只返回变量更新 JSON，并保留最近一次请求、响应、解析结果和变更列表作为只读调试轨迹。派生卡若实现更具体的 `RPStateSync.trace()`，悬浮 Debug 优先显示该轨迹，否则显示 `RPUIStateSync.trace()`。
+
+副模型调度遵循单请求原则：派生卡提供 `RPStateSync` 时，由它在同一次响应中完成 canonical patch、UI Template 变量和行动建议，Conversation Engine 不再额外调用 `RPUIStateSync`。只有未提供卡级状态模型的通用模板才单独使用 `RPUIStateSync`。所有异步状态提交必须合并到返回当刻的最新 canonical state，不能用请求开始前的快照整包覆盖。
