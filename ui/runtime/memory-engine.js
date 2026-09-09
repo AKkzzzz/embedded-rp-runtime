@@ -168,6 +168,33 @@
     return removed;
   }
 
+  function pruneToMessages(messages, removal) {
+    var liveTurns = window.RPVectorMemory && window.RPVectorMemory.completeTurns
+      ? window.RPVectorMemory.completeTurns(messages)
+      : [];
+    var liveIds = new Set(liveTurns.flatMap(function (turn) {
+      return turn.sourceAssistantIds || [];
+    }));
+    var targetedIds = new Set(Array.isArray(removal && removal.assistantIds) ? removal.assistantIds : []);
+    var targetedTurns = new Set(Array.isArray(removal && removal.assistantTurns)
+      ? removal.assistantTurns.map(Number).filter(Boolean)
+      : []);
+    var targeted = targetedIds.size > 0 || targetedTurns.size > 0;
+    return removeStructured(function (memory) {
+      var sourceIds = Array.isArray(memory.sourceAssistantIds) && memory.sourceAssistantIds.length
+        ? memory.sourceAssistantIds
+        : [];
+      var generated = memory.classicMemory === true || memory.kind === 'classicMemory' || sourceIds.length;
+      if (!generated) return false;
+      if (targeted) {
+        if (sourceIds.length) return sourceIds.some(function (id) { return targetedIds.has(id); });
+        return targetedTurns.has(Number(memory.turn || 0));
+      }
+      if (sourceIds.length) return sourceIds.some(function (id) { return !liveIds.has(id); });
+      return Number(memory.turn || 0) > liveTurns.length;
+    });
+  }
+
   function enqueueEmbedding(memoryIds) {
     var caps = window.RPHost.capabilities();
     if (!caps.embeddings) return { ok: false, error: 'embedding route unavailable' };
@@ -202,14 +229,48 @@
     return true;
   }
 
+  async function exportData() {
+    await init();
+    await writeQueue.catch(function () { return null; });
+    return {
+      version: 1,
+      entries: customEntries(),
+      exportedAt: new Date().toISOString()
+    };
+  }
+
+  async function importData(payload) {
+    await init();
+    var rows = Array.isArray(payload) ? payload : payload && payload.entries;
+    if (!Array.isArray(rows)) throw new Error('存档中的结构化记忆不是有效数组');
+    if (rows.length > 10000) throw new Error('存档中的结构化记忆超过上限');
+    var authoredIds = new Set(authored.structured.map(function (item) { return item.id; }));
+    var seen = new Set();
+    var custom = rows.filter(function (row) {
+      if (!row || typeof row !== 'object' || !row.id || authoredIds.has(row.id) || seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    }).map(clone);
+    structured = mergeEntries(authored.structured, custom);
+    await writeStored(custom);
+    if (typeof indexedDB !== 'undefined') {
+      try { localStorage.removeItem(legacyKey); } catch (_error) {}
+    }
+    window.RPEvents.emit('memory:structured:changed', { action: 'import', total: structured.length, custom: custom.length });
+    return { imported: custom.length, total: structured.length };
+  }
+
   window.RPMemory = {
     init: init,
     flush: function () { return writeQueue; },
     listStructured: function () { return structured.map(function (item) { return Object.assign({}, item); }); },
+    exportData: exportData,
+    importData: importData,
     listVectors: function () { return vectors.map(function (item) { return Object.assign({}, item); }); },
     searchStructured: searchStructured,
     addStructured: addStructured,
     removeStructured: removeStructured,
+    pruneToMessages: pruneToMessages,
     enqueueEmbedding: enqueueEmbedding,
     searchVectors: function (query, options) {
       return window.RPVectorMemory ? window.RPVectorMemory.search(query, options) : Promise.resolve([]);

@@ -94,6 +94,7 @@
     var disabled = toBoolean(merged.disable !== undefined ? merged.disable : merged.disabled, false);
     return Object.assign({}, clone(merged), {
       id: stableId(merged, index),
+      sourceOrder: index,
       name: String(merged.name || merged.comment || '未命名条目'),
       comment: String(merged.comment || merged.name || '未命名条目'),
       content: String(merged.content || ''),
@@ -117,10 +118,25 @@
     });
   }
 
+  function editOverrides() {
+    var value = window.RPStorage.getPreferences().worldbookEdits;
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  }
+
   function entries() {
-    var source = window.RPTemplateData.worldbook.concat(
-      window.RPWorldbookPatches ? window.RPWorldbookPatches.entries() : []
-    );
+    var overrides = editOverrides();
+    var authored = window.RPTemplateData.worldbook.map(function (entry) {
+      var override = overrides[entry.id];
+      return Object.assign({}, clone(entry), override ? clone(override) : {}, {
+        id: entry.id,
+        builtin: true,
+        edited: Boolean(override)
+      });
+    });
+    var local = (window.RPWorldbookPatches ? window.RPWorldbookPatches.entries() : []).map(function (entry) {
+      return Object.assign({}, entry, { builtin: false, local: true });
+    });
+    var source = authored.concat(local);
     return source.map(normalizeEntry);
   }
 
@@ -161,6 +177,26 @@
     return String(message && message.content !== undefined ? message.content : message || '');
   }
 
+  // Manual worldbook queries are explicit lookups. They search the catalog
+  // metadata and content without pretending that the entry was triggered in
+  // the conversation. Automatic retrieval continues to use trigger semantics.
+  function manualSearchMatches(entry, query) {
+    var text = String(query || '').trim().toLowerCase();
+    if (!text) return false;
+    var searchable = [
+      entry.name,
+      entry.comment,
+      entry.keys.join(' '),
+      Array.isArray(entry.tags) ? entry.tags.join(' ') : '',
+      entry.content
+    ].join('\n').toLowerCase();
+    if (searchable.indexOf(text) !== -1) return true;
+    var terms = text.split(/[\\s,，。！？、；;：:（）()【】\[\]{}"'“”‘’/]+/).filter(function (term) {
+      return term.length >= 2;
+    });
+    return terms.length > 0 && terms.some(function (term) { return searchable.indexOf(term) !== -1; });
+  }
+
   function postprocessHistory(history, query) {
     var queryIndex = (history || []).length;
     var source = (history || []).map(function (message, index) {
@@ -195,6 +231,21 @@
 
   function evaluate(entry, query, history, state, options, probabilityCache) {
     var trigger = entry.trigger || {};
+    if (options.manual) {
+      if (trigger.type === 'state') {
+        var manualStateOk = stateMatches(state, trigger.path, trigger.expected);
+        var manualStateMatched = manualStateOk && manualSearchMatches(entry, query);
+        return { matched: manualStateMatched, score: manualStateMatched ? 40 : 0, reason: manualStateMatched ? 'manual:state' : manualStateOk ? 'manual:no-match' : 'manual:state-mismatch', matchedKeys: [], messageIndexes: [] };
+      }
+      var manualMatched = manualSearchMatches(entry, query);
+      return {
+        matched: manualMatched,
+        score: manualMatched ? (entry.constant ? 1000 : 40) : 0,
+        reason: manualMatched ? 'manual:catalog-search' : 'manual:no-match',
+        matchedKeys: manualMatched ? ['manual-query'] : [],
+        messageIndexes: []
+      };
+    }
     if (entry.constant || trigger.type === 'constant') {
       return { matched: true, score: 1000, reason: 'constant', matchedKeys: ['常驻'], messageIndexes: [] };
     }
@@ -286,9 +337,7 @@
       history: [],
       scanDepth: toNumber(configured.scanDepth, 2),
       maxScanDepth: toNumber(configured.maxScanDepth, 0),
-      charBudget: toNumber(configured.charBudget, 0),
       maxDependencyDepth: toNumber(configured.maxDependencyDepth, 3),
-      selectiveLimit: 0,
       scopes: ['global', 'character'],
       random: Math.random,
       state: window.RPStorage.getCanonical()
@@ -332,11 +381,12 @@
     primary.sort(function (a, b) {
       if (a.entry.constant && !b.entry.constant) return -1;
       if (!a.entry.constant && b.entry.constant) return 1;
-      return b.score - a.score || Number(b.entry.order || 0) - Number(a.entry.order || 0);
+      return b.score - a.score ||
+        Number(b.entry.order || 0) - Number(a.entry.order || 0) ||
+        Number(a.entry.sourceOrder || 0) - Number(b.entry.sourceOrder || 0);
     });
     var constants = primary.filter(function (row) { return row.entry.constant; });
     var selective = primary.filter(function (row) { return !row.entry.constant; });
-    if (options.selectiveLimit > 0) selective = selective.slice(0, options.selectiveLimit);
     var queue = constants.concat(selective);
     var seen = new Set();
     var hits = [];
@@ -353,10 +403,6 @@
         continue;
       }
       var block = '【' + row.entry.name + '】\n' + row.entry.content;
-      if (options.charBudget > 0 && usedChars + block.length > options.charBudget) {
-        diagnostics.push({ id: row.entry.id, matched: false, reason: 'char-budget' });
-        continue;
-      }
       seen.add(row.entry.id);
       usedChars += block.length;
       hits.push({
@@ -370,6 +416,7 @@
         insertionDepth: row.entry.depth,
         scope: row.entry.scope,
         order: row.entry.order,
+        sourceOrder: row.entry.sourceOrder,
         chars: block.length,
         content: row.entry.content
       });
@@ -390,9 +437,9 @@
       usedChars: usedChars,
       diagnostics: diagnostics,
       settings: {
+        manual: options.manual === true,
         scanDepth: options.scanDepth,
         maxScanDepth: options.maxScanDepth,
-        charBudget: options.charBudget,
         maxDependencyDepth: options.maxDependencyDepth
       },
       at: new Date().toISOString()
@@ -410,6 +457,63 @@
     window.RPStorage.savePreferences({ worldbookDisabled: Array.from(new Set(disabled)) });
     window.RPEvents.emit('worldbook:preferences:changed', { id: id, enabled: enabled });
     return true;
+  }
+
+  function update(id, patch) {
+    var target = byId(id);
+    if (!target) return { ok: false, error: 'missing-entry' };
+    var next = {
+      name: String(patch && patch.name !== undefined ? patch.name : target.name).trim() || target.name,
+      comment: String(patch && patch.name !== undefined ? patch.name : target.comment).trim() || target.comment,
+      content: String(patch && patch.content !== undefined ? patch.content : target.content),
+      constant: patch && patch.constant !== undefined ? Boolean(patch.constant) : Boolean(target.constant),
+      useRegex: patch && patch.useRegex !== undefined ? Boolean(patch.useRegex) : Boolean(target.useRegex),
+      keys: normalizeKeys(patch && patch.keys !== undefined ? patch.keys : target.keys),
+      placement: normalizePlacement(patch && patch.placement !== undefined ? patch.placement : target.placement),
+      position: normalizePlacement(patch && patch.placement !== undefined ? patch.placement : target.position),
+      order: toNumber(patch && patch.order !== undefined ? patch.order : target.order, Number(target.order || 0)),
+      depth: Math.max(0, toNumber(patch && patch.depth !== undefined ? patch.depth : target.depth, Number(target.depth || 0))),
+      scanDepth: patch && patch.scanDepth !== undefined && patch.scanDepth !== '' ? Math.max(0, toNumber(patch.scanDepth, 0)) : null,
+      probability: Math.min(100, Math.max(0, toNumber(patch && patch.probability !== undefined ? patch.probability : target.probability, 100))),
+      useProbability: patch && patch.useProbability !== undefined ? Boolean(patch.useProbability) : target.useProbability !== false
+    };
+    if (!next.content.trim()) return { ok: false, error: 'empty-content' };
+    if (!next.constant && !next.keys.length) return { ok: false, error: 'missing-keys' };
+    next.trigger = next.constant ? { type: 'constant' } : next.useRegex
+      ? { type: 'regex', patterns: next.keys.slice() }
+      : { type: 'literal', keys: next.keys.slice(), caseSensitive: false };
+    if (target.builtin) {
+      var overrides = Object.assign({}, editOverrides());
+      overrides[id] = next;
+      window.RPStorage.savePreferences({ worldbookEdits: overrides });
+    } else if (target.local && window.RPWorldbookPatches && window.RPWorldbookPatches.updateLocal) {
+      var result = window.RPWorldbookPatches.updateLocal(id, next);
+      if (!result || !result.ok) return { ok: false, error: (result && result.errors || ['save-failed']).join('；') };
+    } else return { ok: false, error: 'unsupported-entry' };
+    window.RPEvents.emit('worldbook:preferences:changed', { id: id, updated: true });
+    return { ok: true, entry: byId(id) };
+  }
+
+  function restoreBuiltin(id) {
+    if (!window.RPTemplateData.worldbook.some(function (entry) { return entry.id === id; })) return false;
+    var overrides = Object.assign({}, editOverrides());
+    delete overrides[id];
+    window.RPStorage.savePreferences({ worldbookEdits: overrides });
+    window.RPEvents.emit('worldbook:preferences:changed', { id: id, restored: true });
+    return true;
+  }
+
+  function createLocal(patch) {
+    return window.RPWorldbookPatches && window.RPWorldbookPatches.createLocal
+      ? window.RPWorldbookPatches.createLocal(patch || {})
+      : { ok: false, errors: ['本地世界书存储尚未初始化'] };
+  }
+
+  function removeLocal(id) {
+    var target = byId(id);
+    return target && target.local && window.RPWorldbookPatches && window.RPWorldbookPatches.removeLocal
+      ? window.RPWorldbookPatches.removeLocal(id)
+      : { ok: false, errors: ['只能删除玩家新增的世界书'] };
   }
 
   function list() {
@@ -487,6 +591,10 @@
     byId: byId,
     retrieve: retrieve,
     setEnabled: setEnabled,
+    update: update,
+    restoreBuiltin: restoreBuiltin,
+    createLocal: createLocal,
+    removeLocal: removeLocal,
     normalizeEntry: normalizeEntry,
     normalizePlacement: normalizePlacement,
     importRpHub: importRpHub,

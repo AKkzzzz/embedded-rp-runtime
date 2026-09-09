@@ -17,6 +17,9 @@
     });
 
     var caps = await window.RPHost.detect();
+    if (window.RPStorage.syncMemoryFromHost && window.RPHost.memorySettings) {
+      window.RPStorage.syncMemoryFromHost(window.RPHost.memorySettings());
+    }
     await window.RPPlugins.activateAll();
     await window.RPConversation.init();
     await window.RPMemory.init();
@@ -57,6 +60,32 @@
       await window.RPEvents.emit('runtime:start', { renderer: 'none' });
     };
 
+    var gameDebugToggle = document.getElementById('gameDebugToggle');
+    function syncGameDebugToggle() {
+      if (!gameDebugToggle) return;
+      var enabled = window.RPDebugOverlay && window.RPDebugOverlay.enabled
+        ? window.RPDebugOverlay.enabled()
+        : Boolean(window.RPStorage.getPreferences().debugEnabled);
+      gameDebugToggle.textContent = enabled ? '调试：开' : '调试：关';
+      gameDebugToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      gameDebugToggle.title = enabled ? '关闭卡内调试浮球' : '开启卡内调试浮球';
+    }
+    if (gameDebugToggle) {
+      gameDebugToggle.onclick = function () {
+        var current = window.RPDebugOverlay && window.RPDebugOverlay.enabled
+          ? window.RPDebugOverlay.enabled()
+          : Boolean(window.RPStorage.getPreferences().debugEnabled);
+        if (window.RPDebugOverlay && window.RPDebugOverlay.setEnabled) {
+          window.RPDebugOverlay.setEnabled(!current);
+        } else {
+          window.RPStorage.savePreferences({ debugEnabled: !current });
+        }
+        syncGameDebugToggle();
+      };
+      syncGameDebugToggle();
+      window.RPEvents.on('storage:preferences:changed', syncGameDebugToggle, { owner: 'runtime.game-debug-toggle' });
+    }
+
     document.getElementById('backToDebug').onclick = function () {
       document.getElementById('gameSurface').hidden = true;
       document.querySelector('.runtime-layout').hidden = false;
@@ -69,6 +98,42 @@
         diagnostics: window.RPDiagnostics.snapshot(),
         save: window.RPStorage.exportBundle()
       });
+    };
+
+    document.getElementById('exportSaveButton').onclick = async function () {
+      try {
+        var bundle = await window.RPStorage.exportFullBundle();
+        downloadJson(window.RPTemplateData.app.id + '-save.json', bundle);
+      } catch (error) {
+        await window.RPDialog.alert('导出存档失败：' + String(error && error.message || error));
+      }
+    };
+
+    var importInput = document.getElementById('importSaveFile');
+    document.getElementById('importSaveButton').onclick = function () {
+      importInput.value = '';
+      importInput.click();
+    };
+    importInput.onchange = async function () {
+      var file = importInput.files && importInput.files[0];
+      if (!file) return;
+      try {
+        var bundle = JSON.parse(await file.text());
+        var inspection = window.RPStorage.inspectBundle(bundle);
+        if (!inspection.ok) throw new Error(inspection.errors.join('；'));
+        var confirmed = await window.RPDialog.confirm(
+          '导入后会替换当前人物、剧情、对话、记忆和本地设置。\n' +
+          '对话 ' + inspection.messageCount + ' 条 · 结构化记忆 ' + inspection.structuredMemoryCount +
+          ' 条 · 向量 ' + inspection.vectorCount + ' 条',
+          { okText: '确认导入', danger: true }
+        );
+        if (!confirmed) return;
+        await window.RPStorage.importBundle(bundle);
+        await window.RPDialog.alert('存档已导入，运行时将重新载入。');
+        window.location.reload();
+      } catch (error) {
+        await window.RPDialog.alert('导入存档失败：' + String(error && error.message || error));
+      }
     };
 
     var fullscreenButton = document.getElementById('debugFullscreenButton');

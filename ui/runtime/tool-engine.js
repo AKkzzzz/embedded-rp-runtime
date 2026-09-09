@@ -108,16 +108,19 @@
     if (tool.type === 'worldbook' && window.RPWorldbook) {
       var retrieval = window.RPWorldbook.retrieve(call.query, {
         history: window.RPConversation ? window.RPConversation.list() : [],
-        state: window.RPStorage.getCanonical()
+        state: window.RPStorage.getCanonical(),
+        manual: true
       });
-      var hits = retrieval.hits.slice(0, tool.resultCount || 6);
+      var totalHits = retrieval.hits.length;
+      var resultLimit = Math.max(1, Number(tool.resultCount) || 6);
+      var hits = retrieval.hits.slice(0, resultLimit);
       return {
         call: call,
         mode: /_cover$/i.test(call.name) ? 'cover' : 'add',
         status: 'ok',
-        content: hits.length ? hits.map(function (hit) {
+        content: hits.length ? '主动世界书查询：返回 ' + hits.length + ' / 总计 ' + totalHits + ' 条命中（每次最多 ' + resultLimit + ' 条；未触发条目也可通过名称、关键词、标签或正文检索）。\n\n' + hits.map(function (hit) {
           return '【' + hit.name + '】\n' + hit.content;
-        }).join('\n\n') : '没有找到匹配的世界书条目。'
+        }).join('\n\n') : '主动世界书查询：没有找到匹配的世界书条目。'
       };
     }
     if (tool.type === 'keyword_dialogue') {

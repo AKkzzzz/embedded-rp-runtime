@@ -68,7 +68,7 @@
     var statePrompt = [
       {
         role: 'system',
-        content: '你是RP-Hub UI Template状态副模型。只根据已经发生的对话更新启用模板变量。只返回JSON：{"updates":[{"id":"模板id","variables":{"路径":"新值"},"reason":"简短理由"}]}。不要输出正文、推理、Markdown、预测或未发生的计划。没有变化返回{"updates":[]}。[DICE_RESULT|类型|骰式|骰点|结果|加骰次数|初始骰数]是运行时生成的公开检定证据，可以更新对应检定状态，但不是伤害、物品或剧情结果。'
+        content: '你是RP-Hub UI Template状态副模型。只根据已经发生的对话更新启用模板变量。只返回JSON：{"updates":[{"id":"模板id","variables":{"路径":"新值"},"reason":"简短理由"}]}。不要输出正文、推理、Markdown、预测或未发生的计划。没有变化返回{"updates":[]}。[DICE_RESULT|类型|骰式|骰点|结果|加骰次数|初始骰数]是运行时生成的公开检定证据，可以更新对应检定状态，但不是伤害、物品或剧情结果。一项独立行动通常只有一个主检定；没有明确规则事件依据的额外普通骰不应被当作第二次攻击或伤害骰。'
       },
       {
         role: 'user',
@@ -118,7 +118,9 @@
       var before = clone(template.variableState || template.initialVariableState || {});
       var next = clone(before);
       Object.keys(update.variables || {}).forEach(function (key) {
-        if (key === '$root') next = clone(update.variables[key]);
+        if (key === '$root') {
+          next = clone(update.variables[key]);
+        }
         else setPath(next, key, update.variables[key]);
       });
       if (JSON.stringify(before) === JSON.stringify(next)) return;

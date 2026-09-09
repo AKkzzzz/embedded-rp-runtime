@@ -26,6 +26,9 @@
         messages: prompt && clone(prompt.messages) || [],
         worldbookHits: prompt && clone(prompt.worldbookHits) || [],
         memoryHits: prompt && clone(prompt.memoryHits) || [],
+        vectorMemoryHits: prompt && clone(prompt.vectorMemoryHits) || [],
+        diagnostics: prompt && clone(prompt.diagnostics) || {},
+        vectorSearch: window.RPVectorMemory && window.RPVectorMemory.lastSearch ? window.RPVectorMemory.lastSearch() : null,
         charCount: prompt && prompt.charCount || 0,
         regex: window.RPRegex && window.RPRegex.diagnostics ? window.RPRegex.diagnostics() : null
       };
@@ -47,7 +50,7 @@
         { role: 'user', content: JSON.stringify({ count: count, scene: state.scene, rpg: state.rpg, recent: recent }) }
       ];
       try {
-        var result = await window.RPModels.generate('state', prompt, { stream: false, temperature: 0.55 });
+        var result = await window.RPModels.generate('state', prompt, { stream: false, temperature: 0.55, monitor: false });
         var rows = parseJson(result.content, []);
         if (Array.isArray(rows) && rows.length) return rows.slice(0, count).map(String);
       } catch (_error) {}
@@ -71,10 +74,10 @@
     },
     extract: async function () {
       var messages = (window.RPConversation ? window.RPConversation.list() : []).slice(-20);
-      var result = await window.RPModels.generate('summarize', [
+      var result = await window.RPModels.generate('summary', [
         { role: 'system', content: '提取角色长期记忆。只输出 JSON 数组，每项包含 character、summary、sourceIds、tags。不要杜撰。' },
         { role: 'user', content: JSON.stringify(messages) }
-      ], { stream: false, temperature: 0.2 });
+      ], { stream: false, temperature: 0.2, monitor: false });
       var rows = parseJson(result.content, []);
       return Array.isArray(rows) ? rows : [];
     }
@@ -147,7 +150,7 @@
       var result = await window.RPModels.generate('state', [
         { role: 'system', content: '根据证据起草卡内世界书补丁提案。只输出 proposal JSON；不得直接提交，不得修改作者锁定条目。' },
         { role: 'user', content: JSON.stringify({ instruction: instruction, revision: state.knowledge.revision, recent: window.RPConversation.list().slice(-12) }) }
-      ], { stream: false, temperature: 0.2 });
+      ], { stream: false, temperature: 0.2, monitor: false });
       return parseJson(result.content, { error: '无法解析提案', raw: result.content });
     }
   };

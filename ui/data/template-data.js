@@ -6,13 +6,12 @@
       debugBallAsset: '',
       id: 'nanami-embedded-rp-runtime-template',
       name: '内嵌 RP 运行时模板',
-      version: '0.1.0-debug',
+      version: '0.2.0-debug',
       storagePrefix: 'nanami_embedded_rp_runtime_v1'
     },
     modelRoutes: {
       narrative: { label: '主叙事', inherit: 'current', model: '', temperature: 0.82 },
       state: { label: '状态整理', inherit: 'variable', model: '', temperature: 0.2 },
-      summarize: { label: '记忆摘要', inherit: 'balanced', model: '', temperature: 0.3 },
       embedding: { label: '向量嵌入', inherit: 'embedding', model: '', dimensions: null },
       summary: { label: '历史总结', inherit: 'summarize', model: '', temperature: 0.2 }
     },
@@ -75,9 +74,14 @@
     worldbookSettings: {
       scanDepth: 2,
       maxScanDepth: 0,
-      charBudget: 0,
       maxDependencyDepth: 3
     },
+    narrativePolicy: [
+      '[Narrative Agency And Ensemble Policy]',
+      '把玩家角色视为场景中的一名行动者，不因其玩家身份默认正确、全知、值得崇拜或拥有指挥权。NPC只能依据亲眼所见、可靠报告、既有关系和公开身份评价玩家；角色卡数值、隐藏能力、内心计划与未展示的经历不能成为NPC的已知事实。超常表现应先改变具体现场，再按人物立场产生有限的惊讶、警惕、尊重、嫉妒或质疑，不自动使所有人赞美、服从、交权或围绕玩家行动。',
+      'NPC同样受其人物卡、知识、职责、资源、伤势和关系边界约束，不为压过玩家临时升级，也不为抬高玩家突然失去能力。人物可以独立判断、行动、犯错、争执、拒绝、撤退和承担后果。存在领队、主持人、主管或专业负责人时，普通路线、队形、警戒、工作分配与低风险事务由职责所有者形成判断并推进；玩家可插话、反对、服从或另行行动，但NPC不能把每项常规决定退回给玩家。',
+      '多人场景使用移动焦点，每次由一至两名最相关人物承担行动，其余人物只在反应会改变现场时进入镜头。回复先完成当前因果链，再选择自然落点：已经发生的行动结果、另一人物的决定或反应、环境或威胁的新变化、一个尚未解释的可观察画面，或确实离不开玩家决定的关键分支。前四类落点不需要问句；关键分支也可以开放地停在现场。只有决定直接属于玩家、会改变显著风险/资源/关系/路线或产生不可逆后果时，NPC才提出必要问题。不要连续两轮用“你觉得呢”“你决定”“接下来怎么办”“要不要继续”收尾，也不要用询问代替NPC应承担的判断。'
+    ].join('\n\n'),
     worldbook: [
       {
         id: 'runtime-contract',
@@ -91,6 +95,24 @@
         dependencies: [],
         tags: ['runtime', 'locked'],
         content: '卡内 canonical state 是当前应用的权威状态。世界书补丁必须通过校验后提交。'
+      },
+      {
+        id: 'runtime-image-generation-contract',
+        name: '剧情生图协议',
+        enabled: true,
+        locked: true,
+        constant: true,
+        trigger: { type: 'constant' },
+        order: 1100,
+        placement: 'assistant_top',
+        dependencies: ['runtime-contract'],
+        tags: ['runtime', 'image', 'protocol'],
+        content: [
+          '剧情生图由卡内运行时负责执行，模型只负责在正文后提交图片协议，不直接调用图片 API，也不输出 URL。',
+          '只有出现具有明确视觉价值的地点、线索、异常现象、敌人首次显形、关键现场或重要状态变化时才请求图片；普通对白、重复回合和无新画面的回复不要生图。',
+          '每次回复最多提交一张图。协议必须使用一行：[IMAGE_PROMPT|稳定场景ID|英文逗号标签]。稳定场景 ID 要能在后续同一地点复用；提示词只写主体、地点、关键物件、光线天气、构图和画面风格等可视名词，不粘贴正文、对白、玩家姓名、规则分析或 UI。',
+          '图片协议放在完整正文之后。若生图插件未启用、宿主未配置或请求失败，正文仍必须完整成立，不要编造图片已生成。'
+        ].join('\n')
       },
       {
         id: 'debug-console',
@@ -123,8 +145,8 @@
         placement: 'before_character',
         dependencies: ['runtime-contract'],
         tags: ['example', 'regex'],
-        content: '递归检索必须受最大深度、去重、启用状态和总字符预算约束。'
-      }
+        content: '递归检索必须受最大深度、去重、启用状态和循环保护约束；所有已经命中的条目按稳定源顺序完整注入。'
+      },
     ],
     initialState: {
       runtime: {
@@ -276,7 +298,7 @@
             quests: { type: 'array', items: { type: 'object', additionalProperties: true } },
             inventory: { type: 'array', items: { type: 'object', additionalProperties: true } },
             stats: { type: 'object', additionalProperties: true },
-            scene: { type: 'object', additionalProperties: true }
+            scene: { type: 'object', additionalProperties: true },
           },
           required: ['revision', 'player', 'presentCharacters', 'quests', 'inventory', 'stats', 'scene']
         },

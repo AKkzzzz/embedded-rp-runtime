@@ -10,7 +10,7 @@
 - RP-Hub 世界书字段、扫描深度、概率、七类注入位置和卡内递归；
 - 流式模型调用、停止、继续、重生成、编辑、删除、清空楼层，以及清档竞态保护；
 - 可配置历史保留策略（当前模板默认 40 楼）、从首个完整回合开始的逐轮 classicMemory 总结和 Int8 向量记忆；
-- 后台向量巡检、失败重试队列和本地 IndexedDB 存储；
+- 最新完整回合增量索引、按需手动巡检、失败重试队列和本地 IndexedDB 存储；
 - 按 `storagePrefix` 隔离的聊天历史、总结和向量库；总结与向量从首个完整回合开始，近期原文窗口不参与对应长期记忆召回；
 - 状态 schema、世界书补丁审批和版本冲突检查；
 - 插件生命周期、能力声明、依赖排序、启停和错误隔离；
@@ -136,16 +136,17 @@ RPPlugins.setEnabled('my-plugin', false);
 cd "/Users/nanami/Documents/ecnu/mygame/cards/内嵌RP运行时模板"
 node tools/test-runtime.mjs
 node tools/test-model-runtime.mjs
-python3 ../../skills/build-rphub-card/scripts/audit_single_stage_manifest.py single-stage.manifest.json --project-root .
 node tools/build-template.mjs
 node tools/audit-template.mjs
 node tools/render-preview.mjs
 git diff --check
 ```
 
+若仓库位于本工作区且安装了 `build-rphub-card` 技能，可额外运行 `audit_single_stage_manifest.py`；GitHub 独立克隆不依赖该外部脚本。
+
 出口文件：
 
-- `release/内嵌RP运行时模板-v0.1-debug.json`：可导入 RP-Hub 的正式 JSON；
+- `release/内嵌RP运行时模板-v0.2-debug.json`：可导入 RP-Hub 的 Debug JSON；
 - `qa/template-card-preview.html`：单正则预览；
 - `single-stage.manifest.json`：构建与能力审计清单；
 - `README.md` 与 `docs/`：维护说明，不进入模型上下文。

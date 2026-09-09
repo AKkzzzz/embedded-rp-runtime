@@ -6,7 +6,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const target = process.argv[2]
   ? path.resolve(process.argv[2])
-  : path.join(root, 'release', '内嵌RP运行时模板-v0.1-debug.json');
+  : path.join(root, 'release', '内嵌RP运行时模板-v0.2-debug.json');
 const output = process.argv[3]
   ? path.resolve(process.argv[3])
   : path.join(root, 'qa', 'template-card-preview.html');

@@ -78,6 +78,7 @@
     panel.dataset.expanded = 'false';
     var suppressBallClick = false;
     var activeView = 'live';
+    var retryFeedback = '';
     var unsubscribe = null;
     var lastMonitor = window.RPGenerationMonitor ? window.RPGenerationMonitor.snapshot() : null;
     function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
@@ -179,6 +180,14 @@
         window.RPUIStateSync && window.RPUIStateSync.trace
       );
     }
+    function vectorStatusLabel(search) {
+      var labels = {
+        idle: '尚未检索', disabled: '向量模式未启用', 'empty-index': '向量库为空',
+        'query-empty': '检索词为空', 'embedding-error': '检索请求失败',
+        'no-eligible-memory': '仅有最近保留楼层', 'below-threshold': '相关度未达阈值', recalled: '已召回'
+      };
+      return labels[search && search.status] || String(search && search.status || '未知');
+    }
     function render() {
       var state = window.RPStorage.getCanonical();
       var monitor = lastMonitor || { phase: 'idle', reasoning: '', content: '', reasoningChars: 0, contentChars: 0, durationMs: 0 };
@@ -186,10 +195,18 @@
       var mainTrace = window.RPConversation && window.RPConversation.debugTrace ? window.RPConversation.debugTrace() : null;
       var secondaryTrace = stateTrace();
       var labels = { idle: '待机', starting: '请求中', thinking: '模型思考', writing: '生成正文', complete: '已完成', error: '出错', stopped: '已停止' };
+      var canRetry = monitor.phase === 'error' && window.RPConversation &&
+        window.RPConversation.canRetryLastGeneration && window.RPConversation.canRetryLastGeneration();
       var viewValue = activeView === 'thinking' ? monitor.reasoning :
         activeView === 'content' ? (mainTrace && mainTrace.response || monitor.content) :
         activeView === 'prompt' ? formatPrompt(prompt) :
         activeView === 'worldbook' ? formatWorldbookHits(prompt) :
+        activeView === 'vector' ? (prompt ? {
+          search: prompt.vectorSearch,
+          recalledFragments: prompt.vectorMemoryHits || [],
+          injectedChars: Number(prompt.diagnostics && prompt.diagnostics.vectorRecallChars || 0),
+          note: '近期原文不参与向量召回；旧楼层只在达到相关度阈值时注入。'
+        } : '本轮尚未编译提示词。') :
         activeView === 'state-prompt' ? formatPrompt(secondaryTrace && { messages: secondaryTrace.prompt }) :
         activeView === 'state-response' ? (secondaryTrace || '副模型尚未运行。正文完成后，状态副模型会在这里留下响应与变量更新。') :
         activeView === 'variables' ? state :
@@ -197,20 +214,27 @@
         monitor;
       panel.innerHTML = '<header class="rp-capability-head"><div><strong>本轮调试监视</strong><span>' +
         escapeHtml(labels[monitor.phase] || monitor.phase) + '</span></div><div class="rp-capability-window-actions">' +
+        (canRetry ? '<button type="button" data-cap-retry>重试 / 重roll</button>' : '') +
         '<button type="button" data-cap-expand>' + (panel.dataset.expanded === 'true' ? '还原' : '放大') + '</button>' +
         '<button type="button" data-cap-close aria-label="关闭调试监视">关闭</button></div></header>' +
         '<p style="opacity:.75;margin:4px 0 8px">调试窗只读取主叙事与状态副模型的真实请求快照，不改变模型请求。</p>' +
+        (retryFeedback ? '<p class="rp-capability-retry-feedback">' + escapeHtml(retryFeedback) + '</p>' : '') +
         '<div class="rp-capability-metrics">' +
         '<div><small>思考</small><br><b>' + monitor.reasoningChars + '</b> 字</div>' +
         '<div><small>正文</small><br><b>' + monitor.contentChars + '</b> 字</div>' +
         '<div><small>耗时</small><br><b>' + (Math.round(Number(monitor.durationMs || 0) / 100) / 10) + '</b>s</div>' +
         '<div><small>提示词</small><br><b>' + (prompt ? prompt.charCount || 0 : '—') + '</b> 字</div></div>' +
         '<div class="rp-capability-summary">' + escapeHtml((monitor.route || '未请求') + (monitor.model ? ' · ' + monitor.model : '') +
-          (prompt ? ' · 世界书命中 ' + (prompt.worldbookHits || []).length + ' · 记忆命中 ' + (prompt.memoryHits || []).length : '')) + '</div>' +
+          (prompt ? ' · 世界书命中 ' + (prompt.worldbookHits || []).length +
+            ' · 向量命中 ' + (prompt.vectorMemoryHits || []).length +
+            ' · 向量注入 ' + Number(prompt.diagnostics && prompt.diagnostics.vectorRecallChars || 0) + ' 字' +
+            ' · 结构记忆 ' + (prompt.memoryHits || []).length +
+            ' · ' + vectorStatusLabel(prompt.vectorSearch) : '')) + '</div>' +
         '<nav class="rp-capability-tabs">' +
         '<button data-cap-view="live">实时</button><button data-cap-view="thinking">主模型思考</button><button data-cap-view="content">主模型响应</button>' +
         (window.RPPromptInspector ? '<button data-cap-view="prompt">主模型提示词</button>' : '') +
         (window.RPPromptInspector ? '<button data-cap-view="worldbook">世界书命中</button>' : '') +
+        (window.RPPromptInspector ? '<button data-cap-view="vector">向量诊断</button>' : '') +
         (hasStateTrace() ? '<button data-cap-view="state-prompt">副模型提示词</button><button data-cap-view="state-response">副模型响应</button>' : '') +
         '<button data-cap-view="variables">变量</button>' +
         (window.RPPlugins.isEnabled('runtime.notebook') ? '<button data-cap-view="notes">便签</button>' : '') +
@@ -222,6 +246,19 @@
           activeView = button.dataset.capView;
           render();
         });
+      });
+      var retryButton = panel.querySelector('[data-cap-retry]');
+      if (retryButton) retryButton.addEventListener('click', async function () {
+        retryFeedback = '';
+        activeView = 'live';
+        this.disabled = true;
+        this.textContent = '重试中…';
+        try {
+          await window.RPConversation.retryLastGeneration();
+        } catch (error) {
+          retryFeedback = '重试失败：' + String(error && error.message || error);
+          render();
+        }
       });
       panel.querySelector('[data-cap-expand]').addEventListener('click', function () {
         panel.dataset.expanded = panel.dataset.expanded === 'true' ? 'false' : 'true';
@@ -240,17 +277,42 @@
       ball.title = '运行监视：' + (monitor.phase || 'idle');
       if (!panel.hidden) render();
     }
+    function debugIsEnabled() {
+      return window.RPStorage && typeof window.RPStorage.debugEnabled === 'function'
+        ? window.RPStorage.debugEnabled()
+        : false;
+    }
+    function applyDebugVisibility() {
+      var enabled = debugIsEnabled();
+      ball.hidden = !enabled;
+      if (!enabled) panel.hidden = true;
+      ball.setAttribute('aria-hidden', enabled ? 'false' : 'true');
+    }
+    function setDebugEnabled(enabled) {
+      if (!window.RPStorage || typeof window.RPStorage.savePreferences !== 'function') return false;
+      window.RPStorage.savePreferences({ debugEnabled: Boolean(enabled) });
+      applyDebugVisibility();
+      return true;
+    }
+    window.RPDebugOverlay = {
+      enabled: debugIsEnabled,
+      setEnabled: setDebugEnabled,
+      refresh: applyDebugVisibility
+    };
     if (window.RPGenerationMonitor) unsubscribe = window.RPGenerationMonitor.subscribe(updateBall);
     if (window.RPEvents) {
       window.RPEvents.on('prompt:compiled', function () { if (!panel.hidden) render(); }, { owner: 'runtime.variable-overlay' });
       window.RPEvents.on('state:sync', function () { if (!panel.hidden) render(); }, { owner: 'runtime.variable-overlay' });
       window.RPEvents.on('ui-template:sync', function () { if (!panel.hidden) render(); }, { owner: 'runtime.variable-overlay' });
+      window.RPEvents.on('conversation:changed', function () { if (!panel.hidden) render(); }, { owner: 'runtime.variable-overlay' });
+      window.RPEvents.on('storage:preferences:changed', applyDebugVisibility, { owner: 'runtime.variable-overlay' });
     }
     mount.appendChild(ball);
     mount.appendChild(panel);
     var ballDrag = makeDraggable(ball, 'capability-ball-position', null);
     var panelDrag = makeDraggable(panel, 'capability-panel-position', '.rp-capability-head');
     ballDrag.restore();
+    applyDebugVisibility();
     ball.addEventListener('click', function () {
       if (suppressBallClick) { suppressBallClick = false; return; }
       panel.hidden = !panel.hidden;

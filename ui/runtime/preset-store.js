@@ -290,10 +290,14 @@
     var active = list().filter(function (preset) {
       return preset.runtimeEnabled && String(preset.content || '').trim();
     });
+    var writingStyle = active.filter(function (preset) { return preset.name === '文风（抗八股）'; });
+    var cot = active.filter(function (preset) { return preset.name === 'COT'; });
     return {
       systemRoot: active.filter(function (preset) { return preset.role === 'system' && preset.phase === 'system-root'; }),
       systemSupport: active.filter(function (preset) { return preset.role === 'system' && preset.phase !== 'system-root'; }),
-      prelude: active.filter(function (preset) { return preset.role === 'user' || preset.role === 'assistant'; })
+      prelude: active.filter(function (preset) { return preset.role === 'user' || preset.role === 'assistant'; }),
+      writingStyle: writingStyle,
+      cot: cot
     };
   }
 

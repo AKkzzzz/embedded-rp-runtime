@@ -9,6 +9,10 @@
   var lastError = '';
   var detected = false;
   var IMAGE_GEN_BASE_URL = 'https://nai.sta1n.cn';
+  var imageServiceStatus = {
+    phase: 'unknown', configured: false, connected: false, usable: false,
+    latency: 0, message: '尚未检测生图服务', checkedAt: ''
+  };
 
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -167,6 +171,20 @@
     return null;
   }
 
+  function readLocalMemorySettings() {
+    var scopes = [window];
+    try {
+      if (window.parent && window.parent !== window) scopes.push(window.parent);
+    } catch (_error) {}
+    for (var index = 0; index < scopes.length; index += 1) {
+      try {
+        var raw = scopes[index].localStorage.getItem(MEMORY_SETTINGS_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (_error) {}
+    }
+    return null;
+  }
+
   function normalizeSettings(value, memoryValue) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     var apiUrl = String(value.apiUrl || '').trim().replace(/\/+$/, '');
@@ -216,6 +234,21 @@
     };
   }
 
+  function publicMemorySettings() {
+    if (!cachedMemorySettings || typeof cachedMemorySettings !== 'object') return null;
+    return {
+      enabled: cachedMemorySettings.enabled !== false,
+      mode: cachedMemorySettings.mode === 'vector' ? 'vector' : 'classic',
+      embeddingModel: String(cachedMemorySettings.embeddingModel || ''),
+      classicModel: String(cachedMemorySettings.classicModel || ''),
+      vectorTopK: Number(cachedMemorySettings.vectorTopK) || 10,
+      similarityThreshold: Number(cachedMemorySettings.similarityThreshold) || 50,
+      vectorKeepFloors: Number(cachedMemorySettings.vectorKeepFloors) || 50,
+      summaryKeepFloors: Number(cachedMemorySettings.summaryKeepFloors) || 20,
+      classicConcurrency: Number(cachedMemorySettings.classicConcurrency) || 5
+    };
+  }
+
   function capabilities() {
     var configured = Boolean(cachedSettings);
     return {
@@ -227,6 +260,7 @@
       generation: configured && typeof fetch === 'function',
       embeddings: configured && typeof fetch === 'function',
       imageGeneration: configured && Boolean(cachedSettings.imageGenKey),
+      imageServiceConnected: imageServiceStatus.connected === true,
       recordsRead: typeof window.rpHubGetCardRecords === 'function',
       settingsDetected: detected,
       lastError: lastError
@@ -244,6 +278,7 @@
       value = stored[0];
       cachedMemorySettings = stored[1] && typeof stored[1] === 'object' ? clone(stored[1]) : null;
       if (!value) value = readLocalSettings();
+      if (!cachedMemorySettings) cachedMemorySettings = readLocalMemorySettings();
       cachedSettings = normalizeSettings(value, cachedMemorySettings);
       if (!cachedSettings) lastError = 'RP-Hub API 设置不存在或不完整';
     } catch (error) {
@@ -275,13 +310,15 @@
   function resolveModel(inherit, explicit) {
     if (explicit) return String(explicit);
     if (!cachedSettings) return '';
+    // Embeddings have their own route. An empty embedding model means the
+    // route is unconfigured and must not fall back to a chat model.
+    if (inherit === 'embedding') return cachedSettings.embeddingModel || '';
     var aliases = {
       current: cachedSettings.model,
       quality: cachedSettings.qualityModel || cachedSettings.model,
       balanced: cachedSettings.balancedModel || cachedSettings.model,
       fast: cachedSettings.fastModel || cachedSettings.model,
       variable: cachedSettings.uiTemplateModel || cachedSettings.balancedModel || cachedSettings.model
-      ,embedding: cachedSettings.embeddingModel
       ,summarize: cachedSettings.summaryModel
     };
     return aliases[inherit] || cachedSettings.model || '';
@@ -325,6 +362,81 @@
     };
   }
 
+  function publicImageServiceStatus() {
+    return clone(imageServiceStatus);
+  }
+
+  async function checkImageService(options) {
+    options = options || {};
+    if (options.refreshSettings === true) await detect();
+    var configured = Boolean(cachedSettings && cachedSettings.imageGenKey);
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timeout = typeof window.setTimeout === 'function' ? window.setTimeout(function () {
+      if (controller) controller.abort();
+    }, 10000) : null;
+    var startedAt = window.performance && typeof window.performance.now === 'function'
+      ? window.performance.now() : Date.now();
+    imageServiceStatus = {
+      phase: 'checking', configured: configured, connected: false, usable: false,
+      latency: 0, message: '正在检测生图服务', checkedAt: ''
+    };
+    await window.RPEvents.emit('host:image-status', publicImageServiceStatus());
+    try {
+      if (typeof fetch !== 'function') throw new Error('当前环境不支持网络检测');
+      await fetch(IMAGE_GEN_BASE_URL, {
+        method: 'HEAD',
+        mode: 'no-cors',
+        signal: controller ? controller.signal : undefined
+      });
+      var endedAt = window.performance && typeof window.performance.now === 'function'
+        ? window.performance.now() : Date.now();
+      imageServiceStatus = {
+        phase: configured ? 'ready' : 'unconfigured',
+        configured: configured,
+        connected: true,
+        usable: configured,
+        latency: Math.max(0, Math.round(endedAt - startedAt)),
+        message: configured ? 'RP-Hub 生图配置与服务均可用' : '生图服务可连接，但未检测到 RP-Hub imageGenKey',
+        checkedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      imageServiceStatus = {
+        phase: 'error',
+        configured: configured,
+        connected: false,
+        usable: false,
+        latency: 0,
+        message: '生图服务检测失败：' + String(error && error.message || error),
+        checkedAt: new Date().toISOString()
+      };
+    } finally {
+      if (timeout != null && typeof window.clearTimeout === 'function') window.clearTimeout(timeout);
+    }
+    await window.RPEvents.emit('host:image-status', publicImageServiceStatus());
+    return publicImageServiceStatus();
+  }
+
+  function redetectImageGeneration() {
+    return checkImageService({ refreshSettings: true });
+  }
+
+  function imageArtists(explicit) {
+    if (explicit) return String(explicit);
+    if (!cachedSettings) return '';
+    var style = String(cachedSettings.imageStyle || '');
+    if (style === 'custom') return String(cachedSettings.customImageArtists || '');
+    if (style === 'comicDoujin') {
+      return 'masterpiece, best quality, very aesthetic, modern Japanese anime, official anime art, anime key visual, soft cel shading, restrained color palette, slightly desaturated, soft ambient lighting, detailed background';
+    }
+    if (style === 'galgame') {
+      return 'artist:ningen_mame, noyu_(noyu23386566), toosaka asagi, masterpiece, best quality, very aesthetic, detailed background, no text';
+    }
+    if (style === 'anime') {
+      return 'masterpiece, best quality, very aesthetic, detailed, cinematic anime key visual, soft realistic lighting, restrained color palette, no text';
+    }
+    return 'masterpiece, best quality, very aesthetic, artist:dishwasher1910, artist:ciloranko, artist:sho_(sho_lwlw), ningen mame, soft lighting, year 2024';
+  }
+
   function generateImage(prompt, options) {
     if (!cachedSettings || !cachedSettings.imageGenKey) {
       return Promise.reject(new Error('RP-Hub 生图密钥未配置'));
@@ -334,7 +446,7 @@
       tag: String(prompt || '').trim(),
       token: cachedSettings.imageGenKey,
       model: String(options.model || 'nai-diffusion-4-5-full'),
-      artist: String(options.artist || ''),
+      artist: imageArtists(options.artist),
       size: String(options.size || cachedSettings.imageSize || '竖图'),
       steps: String(options.steps || 40),
       scale: String(options.scale || 6),
@@ -357,12 +469,16 @@
     refresh: detect,
     capabilities: capabilities,
     settings: publicSettings,
+    memorySettings: publicMemorySettings,
     endpoint: endpoint,
     apiFetch: apiFetch,
     resolveModel: resolveModel,
     generationParameters: inheritedGenerationParameters,
     submitIntent: submitIntent,
     imageSettings: imageSettings,
+    imageServiceStatus: publicImageServiceStatus,
+    checkImageService: checkImageService,
+    redetectImageGeneration: redetectImageGeneration,
     generateImage: generateImage
   };
 })();

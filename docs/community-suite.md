@@ -14,7 +14,7 @@
 | Parameter Randomizer | `RPParameterRandomizer` | 在限定范围内随机化 narrative temperature |
 | Lore Copilot | `RPLoreCopilot.draft` | 根据最近历史生成世界书补丁草稿，不自动提交 |
 | Lore Recommender | `RPLoreRecommender.inspect` | 查看命中诊断、重复键和过宽触发词 |
-| Worldbook Tool | `<tool_worldbook:查询>` | 模型主动检索世界书 |
+| Worldbook Tool | `<tool_worldbook:查询>` | 显式搜索世界书目录，可读取尚未自动触发的匹配条目 |
 | Dynamic Audio / Live2D | `RPMedia` | 本地音频、视觉事件、Live2D 能力探测 |
 | RP-Hub Image Generation | `RPImageGen` | 继承同源 `imageGenKey`，在独立 Debug 生图区按需生成图片 |
 
@@ -49,6 +49,8 @@ RPNotebook.add('当前目标', '找到失踪的校准记录。', true);
 ```js
 RPTools.setEnabled('tool_worldbook', true);
 ```
+
+自动检索和主动查询是两个入口。自动检索只注入常驻、关键词/正则/状态触发及其依赖；主动查询会按名称、触发词、标签和正文搜索完整的已启用目录，所以能找到当前对话尚未触发的条目。主动查询不会读取禁用条目，不会绕过作用域或状态条件；每次最多返回 6 条，并明确报告已返回数量与总命中数。
 
 表现层应调用稳定的 `RP*` 接口，不直接读取插件的 localStorage 键。
 

@@ -34,6 +34,7 @@ const sandbox = {
   Math,
   Error,
   TypeError,
+  AbortController,
   console
 };
 sandbox.window = sandbox;

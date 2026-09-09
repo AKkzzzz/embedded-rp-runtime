@@ -57,6 +57,9 @@
         '<article class="debug-card"><p class="eyebrow">WORLDBOOK</p><div class="metric"><span>启用条目</span><strong>' + worldbook.enabled + '/' + worldbook.total + '</strong></div><p class="tiny">递归和预算由卡内引擎处理</p></article>' +
         '<article class="debug-card"><p class="eyebrow">MEMORY</p><div class="metric"><span>向量覆盖率</span><strong>' + memory.vectorCoverage + '%</strong></div><p class="tiny">' + memory.structured + ' 条结构化记忆</p></article>' +
         '<article class="debug-card wide"><p class="eyebrow">STARTUP GATE</p><h3>Debug 后台 → 选择应用 → Renderer 接管</h3><p class="muted">底层服务不会因切换表现层而重建。Galgame、电子书和战棋共用相同的世界书、状态、记忆、模型路由与插件生命周期。</p></article>' +
+        '<article class="debug-card wide"><p class="eyebrow">PORTABLE SAVE</p><h3>完整存档</h3><p class="muted">导出或恢复人物、剧情、完整对话、记忆、向量与本地设置。</p><div class="control-line"><button type="button" class="secondary" data-overview-import-save>导入存档</button><button type="button" class="secondary" data-overview-export-save>导出存档</button></div></article>' +
+        '<article class="debug-card wide"><p class="eyebrow">IN-GAME DEBUG</p><h3>游戏内调试浮球</h3><p class="muted">只控制调试浮球和监视面板的显示，不改变剧情、状态或模型请求。</p><div class="control-line"><button type="button" class="secondary" id="overviewDebugToggle">' +
+          (window.RPStorage.debugEnabled && window.RPStorage.debugEnabled() ? '关闭调试浮球' : '开启调试浮球') + '</button></div></article>' +
         checkHtml +
       '</div>';
     target.querySelector('#refreshRuntimeConfig').onclick = async function () {
@@ -77,6 +80,18 @@
       };
       this.disabled = false;
       renderAll();
+    };
+    target.querySelector('[data-overview-import-save]').onclick = function () {
+      document.getElementById('importSaveButton').click();
+    };
+    target.querySelector('[data-overview-export-save]').onclick = function () {
+      document.getElementById('exportSaveButton').click();
+    };
+    target.querySelector('#overviewDebugToggle').onclick = function () {
+      var enabled = window.RPStorage.debugEnabled && window.RPStorage.debugEnabled();
+      if (window.RPDebugOverlay && window.RPDebugOverlay.setEnabled) window.RPDebugOverlay.setEnabled(!enabled);
+      else window.RPStorage.savePreferences({ debugEnabled: !enabled });
+      renderOverview();
     };
   }
 
@@ -102,10 +117,17 @@
         escapeHtml(row[2]) + '</div></div><div class="muted">' + escapeHtml(row[1]) + '</div>' +
         badge(enabled ? '可用' : '关闭', enabled ? 'ok' : 'warn') + '</div>';
     }).join('');
+    var canRetry = monitor.phase === 'error' && window.RPConversation &&
+      window.RPConversation.canRetryLastGeneration && window.RPConversation.canRetryLastGeneration();
+    var retryCard = canRetry
+      ? '<article class="debug-card wide"><p class="eyebrow">RECOVERY</p><h3>本次主叙事请求可以安全重试</h3>' +
+        '<p class="muted">复用同一条玩家输入与生成前历史，不会再追加一条玩家消息，也不会重复应用状态结算。</p>' +
+        '<div class="control-line"><button type="button" class="primary" id="retryGenerationButton">重试 / 重roll 本次请求</button></div></article>'
+      : '';
     target.innerHTML = pageHead(
       '实时生成与能力入口',
       '悬浮球提供轻量实时监视；这里保留完整模型状态、宿主返回的 reasoning/thinking、正文流、提示词来源和调试动作。'
-    ) + '<div class="card-grid">' +
+    ) + '<div class="card-grid">' + retryCard +
       '<article class="debug-card"><p class="eyebrow">PHASE</p><h3>' + escapeHtml(phaseLabels[monitor.phase] || monitor.phase || '待机') + '</h3><p class="tiny">' + escapeHtml((monitor.route || '尚未请求') + (monitor.model ? ' · ' + monitor.model : '')) + '</p></article>' +
       '<article class="debug-card"><div class="metric"><span>思考内容</span><strong>' + Number(monitor.reasoningChars || 0) + '</strong></div><p class="tiny">宿主 reasoning/thinking 字符</p></article>' +
       '<article class="debug-card"><div class="metric"><span>正文输出</span><strong>' + Number(monitor.contentChars || 0) + '</strong></div><p class="tiny">当前请求累计字符</p></article>' +
@@ -120,6 +142,17 @@
       '<article class="debug-card wide"><p class="eyebrow">CAPABILITY REACHABILITY</p><div class="row-list">' + pluginRows + '</div>' +
         '<div class="control-line" style="margin-top:10px"><button id="debugSuggestions">生成行动建议</button><button id="debugCharacterMemory">提取并保存角色记忆</button></div>' +
         '<pre id="debugCapabilityOutput">' + escapeHtml(actionOutput || '这里的按钮会实际调用对应插件，用于确认能力不是“只注册、无入口”。') + '</pre></article></div>';
+    var retryButton = target.querySelector('#retryGenerationButton');
+    if (retryButton) retryButton.onclick = async function () {
+      this.disabled = true;
+      this.textContent = '重试中…';
+      try {
+        await window.RPConversation.retryLastGeneration();
+        renderMonitor('失败请求已重试完成。');
+      } catch (error) {
+        renderMonitor('重试失败：' + String(error && error.message || error));
+      }
+    };
     target.querySelector('#debugSuggestions').onclick = async function () {
       this.disabled = true;
       try { renderMonitor(JSON.stringify(await window.RPGuided.suggest(3), null, 2)); }
@@ -236,7 +269,7 @@
     var rows = entries.map(function (entry) {
       return '<div class="data-row"><div><strong>' + escapeHtml(entry.name) + '</strong><div class="tiny">' + escapeHtml(entry.id) + '</div></div>' +
         '<div><div>' + escapeHtml(triggerSummary(entry)) + '</div><div class="tiny">依赖 ' + escapeHtml((entry.dependencies || []).join(', ') || '无') + ' · ' + escapeHtml(entry.placement) + '</div></div>' +
-        '<div><button type="button" class="toggle" data-worldbook-toggle="' + escapeHtml(entry.id) + '">' + (entry.runtimeEnabled ? '启用' : '关闭') + '</button>' + (entry.source === 'user' || entry.source === 'imported' ? '<button type="button" class="toggle" data-worldbook-edit="' + escapeHtml(entry.id) + '">编辑</button>' : '') + '</div></div>';
+        '<div><button type="button" class="toggle" data-worldbook-toggle="' + escapeHtml(entry.id) + '">' + (entry.runtimeEnabled ? '启用' : '关闭') + '</button><button type="button" class="toggle" data-worldbook-edit="' + escapeHtml(entry.id) + '">编辑</button>' + (entry.builtin && entry.edited ? '<button type="button" class="toggle" data-worldbook-restore="' + escapeHtml(entry.id) + '">恢复原文</button>' : '') + '</div></div>';
     }).join('');
     var resultHtml = result ? '<article class="debug-card wide"><p class="eyebrow">SCAN RESULT</p><h3>命中 ' + result.hits.length + ' 条 · ' + result.usedChars + ' 字符</h3><pre>' +
       escapeHtml(JSON.stringify({ hits: result.hits, diagnostics: result.diagnostics }, null, 2)) + '</pre></article>' : '';
@@ -274,19 +307,21 @@
     function openEditor(entry) {
       editingId = entry && entry.id || '';
       editor.hidden = false;
+      target.querySelector('#removeWorldbookEntry').hidden = Boolean(entry && !entry.local);
       target.querySelector('#worldbookEditName').value = entry ? entry.name : '';
       target.querySelector('#worldbookEditKeys').value = entry ? (entry.keys || []).join(', ') : '';
       target.querySelector('#worldbookEditContent').value = entry ? entry.content : '';
     }
     target.querySelector('#newWorldbookEntry').onclick = function () { openEditor(null); };
-    target.querySelectorAll('[data-worldbook-edit]').forEach(function (button) { button.onclick = function () { var entry = window.RPWorldbook.byId(button.dataset.worldbookEdit); if (entry && entry.source !== 'user' && entry.source !== 'imported') return; openEditor(entry); }; });
+    target.querySelectorAll('[data-worldbook-edit]').forEach(function (button) { button.onclick = function () { openEditor(window.RPWorldbook.byId(button.dataset.worldbookEdit)); }; });
     target.querySelector('#saveWorldbookEntry').onclick = function () {
       var data = { name: target.querySelector('#worldbookEditName').value.trim(), content: target.querySelector('#worldbookEditContent').value.trim(), keys: target.querySelector('#worldbookEditKeys').value.split(/[,，]/).map(function (v) { return v.trim(); }).filter(Boolean), trigger: { type: 'literal', keys: target.querySelector('#worldbookEditKeys').value.split(/[,，]/).map(function (v) { return v.trim(); }).filter(Boolean) } };
-      var result = editingId ? window.RPWorldbookPatches.updateLocal(editingId, data) : window.RPWorldbookPatches.createLocal(data);
-      if (!result.ok) { window.RPDialog.alert('保存失败：' + result.errors.join('；')); return; }
+      var result = editingId ? window.RPWorldbook.update(editingId, data) : window.RPWorldbook.createLocal(data);
+      if (!result.ok) { window.RPDialog.alert('保存失败：' + String(result.error || (result.errors || []).join('；'))); return; }
       renderWorldbook();
     };
-    target.querySelector('#removeWorldbookEntry').onclick = function () { if (!editingId) return; var result = window.RPWorldbookPatches.removeLocal(editingId); if (!result.ok) window.RPDialog.alert(result.errors.join('；')); else renderWorldbook(); };
+    target.querySelector('#removeWorldbookEntry').onclick = function () { if (!editingId) return; var result = window.RPWorldbook.removeLocal(editingId); if (!result.ok) window.RPDialog.alert((result.errors || [result.error]).join('；')); else renderWorldbook(); };
+    target.querySelectorAll('[data-worldbook-restore]').forEach(function (button) { button.onclick = function () { window.RPWorldbook.restoreBuiltin(button.dataset.worldbookRestore); renderWorldbook(); }; });
     target.querySelectorAll('[data-worldbook-toggle]').forEach(function (button) {
       button.onclick = function () {
         var entry = window.RPWorldbook.byId(button.dataset.worldbookToggle);
@@ -366,7 +401,7 @@
       summaryEnabled: false,
       inheritRpHub: true,
       autoIndex: true,
-      patrolEnabled: true,
+      patrolEnabled: false,
       patrolIntervalMs: 60000,
       retryEnabled: true,
       maxRetryAttempts: 6,
@@ -374,9 +409,10 @@
       vectorKeepFloors: 40,
       maxHistoryFloors: 40,
       topK: 10,
-      similarityThreshold: 0.5,
+      similarityThreshold: 0.4,
+      vectorRecallMaxChars: 8000,
       summaryConcurrency: 5,
-      maxVectors: 2000
+      maxVectors: 0
     }, preferences.memoryModules || {});
     var rows = window.RPMemory.listStructured().map(function (memory) {
       return '<div class="data-row stack"><div><strong>' + escapeHtml(memory.title) + '</strong> ' + badge(memory.kind) + '</div><p class="muted">' +
@@ -392,12 +428,15 @@
       '<article class="debug-card wide"><div class="card-grid">' +
         '<label class="field"><span>记忆模式</span><select id="memoryMode"><option value="classic" ' + (memorySettings.memoryMode !== 'vector' ? 'selected' : '') + '>classic 总结</option><option value="vector" ' + (memorySettings.memoryMode === 'vector' ? 'selected' : '') + '>vector 向量</option></select><small>两者互斥，只启用一种长期记忆</small></label>' +
         '<label class="field"><span>自动建立向量</span><input type="checkbox" id="autoIndex" ' + (memorySettings.autoIndex ? 'checked' : '') + '><small>回复完成后后台批量处理，不参与流式过程</small></label>' +
-        '<label class="field"><span>后台巡检</span><input type="checkbox" id="patrolEnabled" ' + (memorySettings.patrolEnabled ? 'checked' : '') + '><small>定期扫描已完成楼层，补齐漏掉的向量</small></label>' +
+        '<label class="field"><span>后台巡检</span><input type="checkbox" id="patrolEnabled" ' + (memorySettings.patrolEnabled ? 'checked' : '') + '><small>默认关闭；需要定期检查历史缺口时再开启</small></label>' +
         '<label class="field"><span>失败自动重试</span><input type="checkbox" id="retryEnabled" ' + (memorySettings.retryEnabled ? 'checked' : '') + '><small>接口失败后使用指数退避，最多重试指定次数</small></label>' +
         '<label class="field"><span>巡检间隔（秒）</span><input id="patrolIntervalMs" type="number" min="15" max="3600" value="' + Math.round(Number(memorySettings.patrolIntervalMs || 60000) / 1000) + '"><small>默认60秒，最低15秒</small></label>' +
         '<label class="field"><span>最大重试次数</span><input id="maxRetryAttempts" type="number" min="1" max="12" value="' + Number(memorySettings.maxRetryAttempts || 6) + '"><small>超过后进入失败队列，可手动重试</small></label>' +
         '<label class="field"><span>总结保留楼层</span><input id="summaryKeepFloors" type="number" min="0" max="200" value="' + Number(memorySettings.summaryKeepFloors || 40) + '"><small>classic 模式使用</small></label>' +
         '<label class="field"><span>向量保留楼层</span><input id="vectorKeepFloors" type="number" min="0" max="200" value="' + Number(memorySettings.vectorKeepFloors || 40) + '"><small>vector 模式使用</small></label>' +
+        '<label class="field"><span>召回分片数</span><input id="vectorTopK" type="number" min="1" max="50" value="' + Number(memorySettings.topK || 10) + '"><small>每轮最多注入的相关向量分片</small></label>' +
+        '<label class="field"><span>最低相关度</span><input id="similarityThreshold" type="number" min="0.35" max="1" step="0.01" value="' + Number(memorySettings.similarityThreshold || 0.4) + '"><small>默认 0.40；过高会导致零召回</small></label>' +
+        '<label class="field"><span>向量注入字符上限</span><input id="vectorRecallMaxChars" type="number" min="1000" max="30000" step="1000" value="' + Number(memorySettings.vectorRecallMaxChars || 8000) + '"><small>只限制每轮注入，不限制本地向量库存量</small></label>' +
         '<label class="field"><span>总结并发数</span><input id="summaryConcurrency" type="number" min="1" max="10" value="' + Number(memorySettings.summaryConcurrency || 5) + '"><small>与 RP-Hub 一致，后台补录缺失的逐轮总结</small></label>' +
       '</div><div class="control-line" style="margin-top:10px"><button id="saveMemorySettings" class="primary">保存记忆设置</button><button id="runVectorPatrol" class="secondary">立即巡检</button><button id="retryVectorQueue" class="secondary">重试失败队列</button><span class="tiny" id="memorySettingsStatus">当前默认继承 RP-Hub</span></div></article>' +
       '<article class="debug-card wide"><div class="row-list">' + rows + '</div></article></div>';
@@ -413,6 +452,9 @@
         maxRetryAttempts: Math.max(1, Math.min(12, Number(target.querySelector('#maxRetryAttempts').value) || 6)),
         summaryKeepFloors: Math.max(0, Math.min(200, Number(target.querySelector('#summaryKeepFloors').value) || 0)),
         vectorKeepFloors: Math.max(0, Math.min(200, Number(target.querySelector('#vectorKeepFloors').value) || 0)),
+        topK: Math.max(1, Math.min(50, Number(target.querySelector('#vectorTopK').value) || 10)),
+        similarityThreshold: Math.max(0.35, Math.min(1, Number(target.querySelector('#similarityThreshold').value) || 0.4)),
+        vectorRecallMaxChars: Math.max(1000, Math.min(30000, Number(target.querySelector('#vectorRecallMaxChars').value) || 8000)),
         summaryConcurrency: Math.max(1, Math.min(10, Number(target.querySelector('#summaryConcurrency').value) || 5)),
         inheritRpHub: true
       });
@@ -467,26 +509,42 @@
     var target = page('images');
     var caps = window.RPHost.capabilities();
     var settings = window.RPHost.imageSettings && window.RPHost.imageSettings();
+    var service = window.RPImageGen && window.RPImageGen.serviceStatus
+      ? window.RPImageGen.serviceStatus()
+      : window.RPHost.imageServiceStatus();
     var recent = window.RPImageGen ? window.RPImageGen.recent() : [];
+    var imageErrors = window.RPImageGen && window.RPImageGen.errors ? window.RPImageGen.errors() : {};
     var cards = recent.map(function (item) {
       return '<article class="debug-card"><img src="' + escapeHtml(item.url) + '" alt="生成图片" style="width:100%;border-radius:10px;display:block"><p class="tiny">' +
         escapeHtml(item.prompt) + '</p></article>';
     }).join('');
+    var errorCards = Object.keys(imageErrors).map(function (id) {
+      var message = String(imageErrors[id] || '生图失败');
+      var prompt = window.RPImageGen.prompt ? window.RPImageGen.prompt(id) : '';
+      return '<article class="debug-card image-error-card"><p class="eyebrow">生成失败</p><h3>' + escapeHtml(id) + '</h3>' +
+        '<p class="muted">' + escapeHtml(message) + '</p><p class="tiny">' + escapeHtml(prompt) + '</p>' +
+        '<button type="button" class="secondary" data-image-retry="' + escapeHtml(id) + '">重试这张图</button></article>';
+    }).join('');
     target.innerHTML = pageHead(
       'RP-Hub 生图',
       '复用 RP-Hub 同源生图配置；密钥只在宿主适配器内部使用，图片按需生成，不写入 canonical state。',
-      '<button type="button" class="secondary" id="refreshImageSettings">刷新配置</button>'
+      '<button type="button" class="secondary" id="refreshImageSettings">重新检测</button>'
     ) +
-      '<div class="card-grid"><article class="debug-card"><div class="metric"><span>配置状态</span><strong>' + (settings && settings.configured ? 'READY' : 'WAIT') + '</strong></div><p class="tiny">' +
-      escapeHtml(settings ? settings.size + ' · 默认 ' + settings.count + ' 张' : '未检测到 RP-Hub 生图密钥') + '</p></article>' +
+      '<div class="card-grid"><article class="debug-card"><div class="metric"><span>配置与服务</span><strong>' + (service.usable ? 'READY' : service.phase === 'checking' ? 'CHECK' : 'WAIT') + '</strong></div><p class="tiny">' +
+      escapeHtml((service.phase === 'unknown' ? (settings && settings.configured ? '配置已读取，尚未检测服务' : '尚未检测') : service.message) +
+        (service.connected && service.latency ? ' · ' + service.latency + 'ms' : '')) + '</p></article>' +
       '<article class="debug-card"><div class="metric"><span>插件状态</span><strong>' + (window.RPPlugins.isEnabled('runtime.image-generation') ? 'ON' : 'OFF') + '</strong></div><p class="tiny">' +
       escapeHtml(caps.imageGeneration ? '同源配置可用' : '等待 RP-Hub imageGenKey') + '</p><button type="button" class="secondary" id="toggleImagePlugin">' +
       (window.RPPlugins.isEnabled('runtime.image-generation') ? '关闭生图插件' : '启用生图插件') + '</button></article></div>' +
       '<article class="debug-card wide"><label class="field"><span>提示词</span><textarea id="imagePrompt" rows="5" style="width:100%" placeholder="例如：anime school library, warm afternoon light, ..."></textarea></label>' +
       '<div class="control-line"><select id="imageSize"><option>竖图</option><option>横图</option><option>方图</option><option>2K竖图</option><option>2K横图</option><option>2K方图</option></select><button type="button" class="primary" id="generateImage">生成图片</button><span class="tiny" id="imageStatus"></span></div></article>' +
-      '<div class="card-grid">' + (cards || '<article class="debug-card wide"><p class="muted">还没有生成记录。</p></article>') + '</div>';
+      '<div class="card-grid">' + (errorCards + cards || '<article class="debug-card wide"><p class="muted">还没有生成记录。</p></article>') + '</div>';
     target.querySelector('#refreshImageSettings').onclick = async function () {
-      await window.RPHost.refresh();
+      this.disabled = true;
+      this.textContent = '检测中…';
+      await (window.RPImageGen && window.RPImageGen.redetectService
+        ? window.RPImageGen.redetectService()
+        : window.RPHost.redetectImageGeneration());
       renderImages();
     };
     target.querySelector('#toggleImagePlugin').onclick = async function () {
@@ -507,6 +565,20 @@
         this.disabled = false;
       }
     };
+    target.querySelectorAll('[data-image-retry]').forEach(function (button) {
+      button.onclick = async function () {
+        var id = button.dataset.imageRetry;
+        var prompt = window.RPImageGen.prompt(id);
+        button.disabled = true;
+        button.textContent = '重试中……';
+        try {
+          await window.RPImageGen.retry(id, prompt, { size: target.querySelector('#imageSize').value });
+        } catch (_error) {
+          // The error is already retained by RPImageGen and rendered on refresh.
+        }
+        renderImages();
+      };
+    });
   }
 
   function renderDiagnostics() {
@@ -576,6 +648,18 @@
     window.RPGenerationMonitor.subscribe(function () {
       var active = document.querySelector('[data-debug-page="monitor"].active');
       if (active) renderMonitor();
+    });
+  }
+  if (window.RPEvents) {
+    window.RPEvents.on('conversation:changed', function () {
+      var active = document.querySelector('[data-debug-page="monitor"].active');
+      if (active) renderMonitor();
+    }, { owner: 'debug-console.monitor-recovery' });
+    ['image:requested', 'image:generating', 'image:generated', 'image:generation-error'].forEach(function (eventName) {
+      window.RPEvents.on(eventName, function () {
+        var active = document.querySelector('[data-debug-page="images"].active');
+        if (active) renderImages();
+      }, { owner: 'debug-console.image-page' });
     });
   }
 })();

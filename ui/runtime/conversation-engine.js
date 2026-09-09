@@ -6,6 +6,7 @@
   var stateSyncPending = Promise.resolve();
   var generationEpoch = 0;
   var lastNarrativeTrace = null;
+  var lastFailedGeneration = null;
   var storagePrefix = window.RPTemplateData.app.storagePrefix;
   var conversationDbName = storagePrefix + ':conversation:v1';
   var conversationDbPromise = null;
@@ -43,6 +44,105 @@
       markerField(data.exploded || 0),
       markerField(data.dice || data.rolls.length)
     ].join('|') + ']';
+  }
+
+  function stripInternalTransport(content) {
+    return String(content || '')
+      .replace(/<\s*active_tool_results(?:\s[^>]*)?>[\s\S]*?<\s*\/\s*active_tool_results\s*>/gi, '')
+      .replace(/<\s*cot(?:\s[^>]*)?>[\s\S]*?<\s*\/\s*cot\s*>/gi, '')
+      .replace(/<\s*\/?\s*(?:active_tool_results?|cot)\b[^>]*>/gi, '')
+      .replace(/<\s*tool_[a-z0-9_]+\s*:[\s\S]*?>/gi, '')
+      .trim();
+  }
+
+  function extractImageRequest(content) {
+    var request = null;
+    var cleaned = String(content || '').replace(/\[IMAGE_PROMPT\|([^|\]]+)\|([^\]]+)\]/gi, function (_all, id, prompt) {
+      if (!request) {
+        request = {
+          id: markerField(id),
+          prompt: String(prompt || '').trim()
+        };
+      }
+      return '';
+    });
+    return { content: cleaned.trim(), request: request && request.id && request.prompt ? request : null };
+  }
+
+  function requestSceneImage(request) {
+    if (!request || !window.RPImageGen || !window.RPPlugins ||
+      typeof window.RPPlugins.isEnabled !== 'function' || !window.RPPlugins.isEnabled('runtime.image-generation')) return;
+    if (window.RPImageGen.get && window.RPImageGen.get(request.id)) return;
+    // RPImageGen owns the request/generating/error event chain. Keep this
+    // detached so image failures never fail the narrative response itself.
+    window.RPImageGen.generate(request.prompt, { id: request.id, count: 1 }).catch(function () {});
+  }
+
+  function stateSnapshot() {
+    var state = window.RPStorage.getCanonical();
+    delete state.conversation;
+    return state;
+  }
+
+  function saveActionCheckpoint(messageId) {
+    if (!window.RPStorage.saveActionCheckpoint) return;
+    window.RPStorage.saveActionCheckpoint({
+      messageId: String(messageId || ''),
+      state: stateSnapshot(),
+      savedAt: now()
+    });
+  }
+
+  function restoreActionCheckpoint(message) {
+    if (!message || !window.RPStorage.getActionCheckpoint) return false;
+    var checkpoint = window.RPStorage.getActionCheckpoint();
+    if (!checkpoint || checkpoint.messageId !== message.id || !checkpoint.state) return false;
+    var current = window.RPStorage.getCanonical();
+    var restored = clone(checkpoint.state);
+    restored.conversation = current.conversation;
+    window.RPStorage.saveCanonical(restored);
+    return true;
+  }
+
+  function branchRemoval(priorMessages, retainedMessages) {
+    var retainedIds = new Set((retainedMessages || []).map(function (message) { return message && message.id; }).filter(Boolean));
+    var turns = window.RPVectorMemory && window.RPVectorMemory.completeTurns
+      ? window.RPVectorMemory.completeTurns(priorMessages || [])
+      : [];
+    var assistantIds = [];
+    var assistantTurns = [];
+    turns.forEach(function (turn) {
+      var ids = turn.sourceAssistantIds && turn.sourceAssistantIds.length
+        ? turn.sourceAssistantIds
+        : (turn.assistant && turn.assistant.id ? [turn.assistant.id] : []);
+      if (ids.some(function (id) { return !retainedIds.has(id); })) {
+        assistantIds = assistantIds.concat(ids);
+        assistantTurns.push(turn.turn);
+      }
+    });
+    return { assistantIds: Array.from(new Set(assistantIds)), assistantTurns: Array.from(new Set(assistantTurns)) };
+  }
+
+  async function reconcileBranchMemories(retainedMessages, priorMessages) {
+    var removal = branchRemoval(priorMessages || [], retainedMessages || []);
+    if (window.RPSummary && window.RPSummary.abortActive) await window.RPSummary.abortActive();
+    if (!removal.assistantIds.length && !removal.assistantTurns.length) return removal;
+    if (window.RPMemory && window.RPMemory.pruneToMessages) {
+      window.RPMemory.pruneToMessages(retainedMessages || [], removal);
+      if (window.RPMemory.flush) await window.RPMemory.flush();
+    }
+    if (window.RPVectorMemory && window.RPVectorMemory.reconcileToMessages) {
+      await window.RPVectorMemory.reconcileToMessages(retainedMessages || [], removal);
+    }
+    return removal;
+  }
+
+  function lastUserActionIndex(messages) {
+    var list = messages || canonicalConversation().messages;
+    for (var index = list.length - 1; index >= 0; index -= 1) {
+      if (list[index] && list[index].role === 'user') return index;
+    }
+    return -1;
   }
 
   function canonicalConversation() {
@@ -148,10 +248,31 @@
     });
   }
 
+  function retryableOptions(options) {
+    options = options || {};
+    return {
+      mode: options.mode || 'send',
+      seed: String(options.seed || ''),
+      appendToId: options.appendToId || '',
+      historyMessages: clone(options.historyMessages || null),
+      stateInput: options.stateInput == null ? null : String(options.stateInput)
+    };
+  }
+
+  function retryContext(input, baseMessages, options) {
+    return {
+      input: String(input || ''),
+      baseMessages: clone(baseMessages || []),
+      options: retryableOptions(options)
+    };
+  }
+
   async function generateWith(input, baseMessages, options) {
     options = options || {};
     if (active) throw new Error('已有生成任务正在进行');
     await stateSyncPending;
+    var failedAttempt = retryContext(input, baseMessages, options);
+    lastFailedGeneration = null;
     if (window.RPStateSync && window.RPStateSync.clearSuggestions) window.RPStateSync.clearSuggestions();
     var epoch = generationEpoch;
     var controller = new AbortController();
@@ -185,7 +306,8 @@
         : (maxFloors > 0 ? sourceHistory.slice(-maxFloors * 2) : sourceHistory);
       var compiled = await window.RPPrompt.compile(input, {
         history: history(promptHistory),
-        character: window.RPCardContext || null
+        character: window.RPCardContext || null,
+        signal: controller.signal
       });
       lastNarrativeTrace.prompt = clone(compiled);
       var requestMessages = compiled.messages.slice();
@@ -237,10 +359,12 @@
         toolSource = generated;
         if (!window.RPTools.parse(generated).length) break;
       }
-      draft.content = draft.content.replace(/<\s*tool_[a-z0-9_]+\s*:[\s\S]*?>/gi, '').trim();
+      draft.content = stripInternalTransport(draft.content);
       if (window.RPRegex) {
         draft.content = window.RPRegex.applyOutput(draft.content, { role: 'assistant' }, baseMessages.length);
       }
+      var imageProtocol = extractImageRequest(draft.content);
+      draft.content = imageProtocol.content;
       var finalMessages = baseMessages.slice();
       if (options.appendToId) {
         var index = finalMessages.findIndex(function (message) { return message.id === options.appendToId; });
@@ -260,6 +384,7 @@
       lastNarrativeTrace.completedAt = now();
       active = null;
       persist(finalMessages, 'idle');
+      requestSceneImage(imageProtocol.request);
       if (window.RPStateSync) {
         stateSyncPending = stateSyncPending.then(function () {
           return window.RPStateSync.reconcile(options.stateInput || input, draft.content);
@@ -274,12 +399,14 @@
         });
       }
       if (window.RPVectorMemory) {
-        window.RPVectorMemory.indexMessages(finalMessages).catch(function (error) {
+        var vectorTask = window.RPVectorMemory.indexLatest || window.RPVectorMemory.indexMessages;
+        vectorTask.call(window.RPVectorMemory, finalMessages).catch(function (error) {
           window.RPEvents.emit('memory:vector:error', { message: String(error.message || error) });
         });
       }
       if (window.RPSummary && window.RPSummary.shouldSummarize(finalMessages)) {
-        window.RPSummary.summarize(finalMessages).catch(function (error) {
+        var summaryTask = window.RPSummary.summarizeLatest || window.RPSummary.summarize;
+        summaryTask.call(window.RPSummary, finalMessages).catch(function (error) {
           window.RPEvents.emit('memory:summary:error', { message: String(error.message || error) });
         });
       }
@@ -300,6 +427,14 @@
         lastNarrativeTrace.error = String(error && error.message || error);
         lastNarrativeTrace.completedAt = now();
       }
+      if (!interrupted) lastFailedGeneration = failedAttempt;
+      if (!interrupted && window.RPGenerationMonitor) {
+        var monitor = window.RPGenerationMonitor.snapshot();
+        if (monitor.phase !== 'error') {
+          window.RPGenerationMonitor.start({ route: 'narrative', model: monitor.model || '', stream: true });
+          window.RPGenerationMonitor.fail(error);
+        }
+      }
       persist(failedMessages, 'idle');
       await changed(interrupted ? 'generation-stopped' : 'generation-error');
       if (!interrupted) throw error;
@@ -308,17 +443,20 @@
   }
 
   async function send(text) {
+    await init();
     var input = String(text || '').trim();
     if (!input) throw new Error('请输入内容');
     var messages = canonicalConversation().messages.slice();
-    messages.push({
+    var message = {
       id: id('user'),
       role: 'user',
       content: input,
       reasoning: '',
       createdAt: now(),
       status: 'complete'
-    });
+    };
+    saveActionCheckpoint(message.id);
+    messages.push(message);
     persist(messages, 'idle');
     await changed('user-message');
     return generateWith(input, messages, { historyMessages: messages.slice(0, -1) });
@@ -331,6 +469,8 @@
   }
 
   async function regenerate() {
+    await init();
+    await stateSyncPending;
     var messages = canonicalConversation().messages.slice();
     var assistantIndex = -1;
     for (var index = messages.length - 1; index >= 0; index -= 1) {
@@ -344,14 +484,68 @@
     }
     var user = messages[assistantIndex - 1];
     var base = messages.slice(0, assistantIndex);
+    restoreActionCheckpoint(user);
     persist(base, 'idle');
+    await reconcileBranchMemories(base, messages);
     return generateWith(user.content, base, {
       mode: 'regenerate',
       historyMessages: base.slice(0, -1)
     });
   }
 
+  async function retryLastGeneration() {
+    await init();
+    if (active) throw new Error('当前请求仍在生成');
+    if (!lastFailedGeneration) throw new Error('没有可重试的失败请求');
+    var failed = clone(lastFailedGeneration);
+    return generateWith(failed.input, failed.baseMessages, failed.options);
+  }
+
+  async function retryLastAction() {
+    await init();
+    if (active) throw new Error('请先停止当前生成');
+    await stateSyncPending;
+    var messages = canonicalConversation().messages.slice();
+    var actionIndex = lastUserActionIndex(messages);
+    if (actionIndex < 0) throw new Error('没有可重roll的玩家行动');
+    var action = messages[actionIndex];
+    var base = messages.slice(0, actionIndex + 1);
+    restoreActionCheckpoint(action);
+    persist(base, 'idle');
+    await reconcileBranchMemories(base, messages);
+    await changed('player-action-retry');
+    return generateWith(action.content, base, {
+      mode: 'action-retry',
+      historyMessages: base.slice(0, -1),
+      stateInput: action.content
+    });
+  }
+
+  async function reviseLastAction(content) {
+    await init();
+    if (active) throw new Error('请先停止当前生成');
+    var nextText = String(content || '').trim();
+    if (!nextText) throw new Error('改写内容不能为空');
+    await stateSyncPending;
+    var messages = canonicalConversation().messages.slice();
+    var actionIndex = lastUserActionIndex(messages);
+    if (actionIndex < 0) throw new Error('没有可改写的玩家行动');
+    var action = Object.assign({}, messages[actionIndex], { content: nextText, status: 'complete' });
+    restoreActionCheckpoint(action);
+    var base = messages.slice(0, actionIndex);
+    base.push(action);
+    persist(base, 'idle');
+    await reconcileBranchMemories(base, messages);
+    await changed('player-action-revised');
+    return generateWith(nextText, base, {
+      mode: 'action-revise',
+      historyMessages: base.slice(0, -1),
+      stateInput: nextText
+    });
+  }
+
   async function continueLast() {
+    await init();
     var messages = canonicalConversation().messages.slice();
     var last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant') throw new Error('没有可继续的助手回复');
@@ -362,36 +556,85 @@
   }
 
   async function edit(messageId, content) {
+    await init();
     if (active) throw new Error('请先停止当前生成');
     var messages = canonicalConversation().messages.slice();
     var index = messages.findIndex(function (message) { return message.id === messageId; });
     if (index < 0) throw new Error('消息不存在');
+    var priorMessages = messages.slice();
     messages[index].content = String(content || '').trim();
     messages = messages.slice(0, index + 1);
     persist(messages, 'idle');
+    await reconcileBranchMemories(messages, priorMessages);
     await changed('message-edited');
     return clone(messages[index]);
   }
 
   async function remove(messageId) {
+    await init();
     if (active) throw new Error('请先停止当前生成');
     var messages = canonicalConversation().messages.slice();
     var index = messages.findIndex(function (message) { return message.id === messageId; });
     if (index < 0) return false;
+    var priorMessages = messages.slice();
     messages.splice(index, 1);
     persist(messages, 'idle');
+    await reconcileBranchMemories(messages, priorMessages);
     await changed('message-removed');
     return true;
   }
 
   async function clear() {
+    await init();
     generationEpoch += 1;
     if (active && active.controller) active.controller.abort();
     active = null;
+    lastFailedGeneration = null;
     stateSyncPending = Promise.resolve();
+    if (window.RPStorage.saveActionCheckpoint) window.RPStorage.saveActionCheckpoint(null);
     persist([], 'idle');
     await changed('conversation-cleared');
     return true;
+  }
+
+  async function exportData() {
+    await init();
+    await conversationWriteQueue.catch(function () { return null; });
+    return {
+      revision: committedRevision,
+      messages: clone(committedMessages),
+      savedAt: now()
+    };
+  }
+
+  async function importData(record) {
+    await init();
+    var next = record && typeof record === 'object' ? record : {};
+    if (!Array.isArray(next.messages)) throw new Error('存档中的完整对话不是有效数组');
+    if (next.messages.length > 20000) throw new Error('存档中的对话楼层超过上限');
+    committedMessages = clone(next.messages);
+    committedRevision = Math.max(1, Number(next.revision || 1));
+    var state = window.RPStorage.getCanonical();
+    var configured = window.RPStorage.getPreferences().memoryModules || {};
+    var recentFloors = Math.max(1, Number(configured.memoryMode === 'vector'
+      ? configured.vectorKeepFloors : configured.summaryKeepFloors) || (configured.memoryMode === 'vector' ? 50 : 20));
+    state.conversation = {
+      revision: committedRevision,
+      messages: typeof indexedDB === 'undefined'
+        ? clone(committedMessages)
+        : clone(committedMessages.slice(-recentFloors * 2)),
+      totalMessages: committedMessages.length,
+      archivedMessages: Math.max(0, committedMessages.length - recentFloors * 2),
+      status: 'idle'
+    };
+    window.RPStorage.saveCanonical(state);
+    await writeConversationStore({
+      revision: committedRevision,
+      messages: clone(committedMessages),
+      savedAt: String(next.savedAt || now())
+    });
+    await changed('conversation-imported');
+    return exportData();
   }
 
   window.RPConversation = {
@@ -399,10 +642,21 @@
     flush: function () { return conversationWriteQueue; },
     list: visible,
     committed: function () { return clone(canonicalConversation().messages); },
+    exportData: exportData,
+    importData: importData,
     isGenerating: function () { return Boolean(active); },
     send: send,
     stop: stop,
     regenerate: regenerate,
+    retryLastGeneration: retryLastGeneration,
+    canRetryLastGeneration: function () { return Boolean(lastFailedGeneration) && !active; },
+    retryLastAction: retryLastAction,
+    reviseLastAction: reviseLastAction,
+    lastAction: function () {
+      var messages = canonicalConversation().messages;
+      var index = lastUserActionIndex(messages);
+      return index < 0 ? '' : String(messages[index].content || '');
+    },
     continueLast: continueLast,
     edit: edit,
     remove: remove,

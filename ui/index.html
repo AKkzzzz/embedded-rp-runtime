@@ -16,6 +16,8 @@
       </div>
       <div class="runtime-actions">
         <span class="host-chip" id="hostChip">检测宿主中</span>
+        <button type="button" class="secondary" id="importSaveButton">导入存档</button>
+        <button type="button" class="secondary" id="exportSaveButton">导出存档</button>
         <button type="button" class="secondary" id="exportButton">导出诊断</button>
         <button type="button" class="secondary" id="debugFullscreenButton" aria-pressed="false">全屏</button>
         <button type="button" class="primary" id="startButton">开始游戏</button>
@@ -61,6 +63,8 @@
           </div>
           <div class="runtime-actions">
             <span class="host-chip" id="gameStatus">待机</span>
+            <span class="image-generation-status" id="imageGenerationStatus" hidden role="status" aria-live="polite"></span>
+            <button type="button" class="secondary" id="gameDebugToggle" aria-pressed="false">调试：关</button>
             <button type="button" class="secondary" id="backToDebug">后台</button>
           </div>
         </header>
@@ -70,6 +74,8 @@
           <div class="conversation-buttons">
             <button type="button" class="secondary" id="continueButton">继续</button>
             <button type="button" class="secondary" id="regenerateButton">重生成</button>
+            <button type="button" class="secondary" id="retryActionButton">重roll上次行动</button>
+            <button type="button" class="secondary" id="reviseActionButton">改写上次行动</button>
             <button type="button" class="secondary" id="clearConversationButton">清空</button>
             <button type="button" class="secondary" id="stopGenerationButton" hidden>停止</button>
             <button type="button" class="primary" id="sendConversationButton">发送</button>
@@ -83,12 +89,14 @@
   <template id="cardTemplate">
     <article class="debug-card"></article>
   </template>
+  <input id="importSaveFile" type="file" accept=".json,application/json" hidden>
 
   <script src="data/template-data.js"></script>
   <script src="data/rphub-presets.js"></script>
   <script src="runtime/event-bus.js"></script>
   <script src="runtime/ui-dialog.js"></script>
   <script src="runtime/storage-engine.js"></script>
+  <script src="runtime/advanced-rules-engine.js"></script>
   <script src="runtime/preset-store.js"></script>
   <script src="runtime/state-guard.js"></script>
   <script src="runtime/host-bridge.js"></script>

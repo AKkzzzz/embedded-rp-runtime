@@ -29,6 +29,17 @@ values.set('rp_hub_settings', JSON.stringify({
   reasoning_effort: 'high',
   providerParameters: { seed: 42, service_tier: 'auto', api_token: 'must-be-filtered' }
 }));
+values.set('rp_hub_memory_settings', JSON.stringify({
+  enabled: true,
+  mode: 'vector',
+  embeddingModel: 'official-embedding',
+  classicModel: 'official-summary',
+  vectorTopK: 14,
+  similarityThreshold: 55,
+  vectorKeepFloors: 60,
+  summaryKeepFloors: 24,
+  classicConcurrency: 4
+}));
 
 const requests = [];
 const responses = [];
@@ -85,7 +96,19 @@ load('ui/data/template-data.js');
 load('ui/runtime/event-bus.js');
 load('ui/runtime/storage-engine.js');
 load('ui/runtime/host-bridge.js');
-sandbox.RPPlugins = { run: async (_hook, value) => value };
+const generatedImages = [];
+sandbox.RPPlugins = {
+  run: async (_hook, value) => value,
+  isEnabled: id => id === 'runtime.image-generation'
+};
+sandbox.RPImageGen = {
+  get: () => null,
+  async generate(prompt, options) {
+    generatedImages.push({ prompt, options });
+    return { url: 'https://example.invalid/image.png' };
+  },
+  recordError() {}
+};
 load('ui/runtime/generation-monitor.js');
 load('ui/runtime/model-gateway.js');
 
@@ -99,6 +122,11 @@ assert.equal(sandbox.RPHost.settings().generationParameters.topP, 0.91);
 assert.equal(sandbox.RPHost.settings().generationParameters.maxCompletionTokens, 4096);
 assert.equal(sandbox.RPHost.settings().generationParameters.providerParameters.seed, 42);
 assert.equal(sandbox.RPHost.settings().generationParameters.providerParameters.api_token, undefined);
+assert.equal(sandbox.RPHost.memorySettings().mode, 'vector');
+assert.equal(sandbox.RPHost.memorySettings().vectorTopK, 14);
+const inheritedMemory = sandbox.RPStorage.syncMemoryFromHost(sandbox.RPHost.memorySettings());
+assert.equal(inheritedMemory.memoryMode, 'vector');
+assert.equal(inheritedMemory.vectorKeepFloors, 60);
 
 responses.push(new Response(JSON.stringify({ data: [{ id: 'official-current' }, { id: 'official-embedding' }] }), {
   status: 200,
@@ -176,6 +204,8 @@ assert.equal(embeddingProbe.ok, true);
 assert.equal(embeddingProbe.model, 'official-embedding');
 assert.equal(embeddingProbe.dimensions, 4);
 load('ui/runtime/vector-memory-engine.js');
+load('ui/runtime/memory-engine.js');
+await sandbox.RPMemory.init();
 const packedVector = sandbox.RPVectorMemory.quantize([1, -0.5, 0]);
 assert.equal(packedVector.embeddingEncoding, 'int8:maxabs:v1');
 assert.equal(packedVector.embeddingDims, 3);
@@ -195,10 +225,10 @@ const vectorConversation = [
   { role: 'assistant', content: '这部分应保留为近期原文。' }
 ];
 sandbox.RPConversation = { list: () => vectorConversation };
-responses.push(new Response(JSON.stringify({ data: [0, 1, 2, 3].map(index => ({
+responses.push(new Response(JSON.stringify({ data: [0, 1].map(index => ({
   index, embedding: index < 2 ? [1 - index * 0.1, index * 0.1, 0] : [0, 1, index]
 })) }), { status: 200, headers: { 'content-type': 'application/json' } }));
-assert.equal((await sandbox.RPVectorMemory.indexMessages(vectorConversation)).added, 4);
+assert.equal((await sandbox.RPVectorMemory.indexMessages(vectorConversation)).added, 2);
 assert.equal(sandbox.RPVectorMemory.stats().indexFromFloor, 0);
 assert.equal(sandbox.RPVectorMemory.stats().indexedFloors, 2);
 assert.equal(sandbox.RPVectorMemory.stats().recallExcludedFloors, 1);
@@ -209,7 +239,7 @@ assert.equal(sandbox.RPVectorMemory.indexableMessages([
 responses.push(new Response(JSON.stringify({ data: [{ index: 0, embedding: [1, 0, 0] }] }), {
   status: 200, headers: { 'content-type': 'application/json' }
 }));
-assert.equal((await sandbox.RPVectorMemory.search('旧港口')).length, 2);
+assert.equal((await sandbox.RPVectorMemory.search('旧港口')).length, 1);
 responses.push(new Response(JSON.stringify({ error: { message: 'temporary embedding failure' } }), {
   status: 503, headers: { 'content-type': 'application/json' }
 }));
@@ -249,7 +279,7 @@ sandbox.RPPrompt = {
 load('ui/runtime/conversation-engine.js');
 
 responses.push(new Response([
-  'data: {"choices":[{"delta":{"content":"第一段"}}]}',
+  'data: {"choices":[{"delta":{"content":"<cot>内部推理不得外漏</cot><active_tool_results>内部结果不得外漏</active_tool_results>第一段[IMAGE_PROMPT|scene-1|rainy station, cinematic light]"}}]}',
   '',
   'data: {"choices":[{"delta":{"content":"完成"}}]}',
   '',
@@ -266,6 +296,16 @@ assert.equal(sandbox.RPConversation.list()[1].content, '第一段完成');
 assert.equal(sandbox.RPStorage.getCanonical().conversation.status, 'idle');
 assert.equal(sandbox.RPConversation.debugTrace().response, '第一段完成');
 assert.equal(sandbox.RPConversation.debugTrace().input, '开始测试');
+assert.equal(sandbox.RPConversation.list()[1].content.includes('内部推理不得外漏'), false);
+assert.equal(sandbox.RPConversation.list()[1].content.includes('IMAGE_PROMPT'), false);
+assert.equal(generatedImages.length, 1);
+assert.equal(generatedImages[0].prompt, 'rainy station, cinematic light');
+assert.equal(generatedImages[0].options.id, 'scene-1');
+assert.equal(generatedImages[0].options.count, 1);
+
+const mutatedBeforeReroll = sandbox.RPStorage.getCanonical();
+mutatedBeforeReroll.runtime.started = true;
+sandbox.RPStorage.saveCanonical(mutatedBeforeReroll);
 
 responses.push(new Response('data: {"choices":[{"message":{"content":"替代回复"}}]}\n\ndata: [DONE]\n', {
   status: 200,
@@ -274,6 +314,83 @@ responses.push(new Response('data: {"choices":[{"message":{"content":"替代回�
 await sandbox.RPConversation.regenerate();
 assert.equal(sandbox.RPConversation.list().length, 2);
 assert.equal(sandbox.RPConversation.list()[1].content, '替代回复');
+assert.equal(sandbox.RPStorage.getCanonical().runtime.started, false, 'reroll restores the state from before the player action');
+
+responses.push(new Response(JSON.stringify({
+  choices: [{ message: { content: '改写行动后的回复', reasoning: '' }, finish_reason: 'stop' }]
+}), { status: 200, headers: { 'content-type': 'application/json' } }));
+await sandbox.RPConversation.reviseLastAction('改写后的开始行动');
+assert.equal(sandbox.RPConversation.list()[0].content, '改写后的开始行动');
+assert.equal(sandbox.RPConversation.list()[1].content, '改写行动后的回复');
+
+let retryStateSyncs = 0;
+sandbox.RPStateSync = {
+  clearSuggestions() {},
+  async reconcile() { retryStateSyncs += 1; }
+};
+responses.push(new Response(JSON.stringify({ error: { message: 'temporary narrative route unavailable' } }), {
+  status: 503,
+  headers: { 'content-type': 'application/json' }
+}));
+await assert.rejects(sandbox.RPConversation.send('失败后只重试这一次输入'), /temporary narrative route unavailable/);
+assert.equal(sandbox.RPGenerationMonitor.snapshot().phase, 'error');
+assert.equal(sandbox.RPConversation.canRetryLastGeneration(), true);
+assert.equal(sandbox.RPConversation.list().filter(message => message.role === 'user' && message.content === '失败后只重试这一次输入').length, 1);
+const firstFailedPrompt = JSON.parse(requests.at(-1).options.body).messages;
+responses.push(new Response(JSON.stringify({ error: { message: 'temporary narrative route unavailable again' } }), {
+  status: 503,
+  headers: { 'content-type': 'application/json' }
+}));
+await assert.rejects(sandbox.RPConversation.retryLastGeneration(), /temporary narrative route unavailable again/);
+assert.equal(sandbox.RPConversation.canRetryLastGeneration(), true, 'a repeated transient failure must remain retryable');
+assert.deepEqual(JSON.parse(requests.at(-1).options.body).messages, firstFailedPrompt);
+responses.push(new Response(JSON.stringify({
+  choices: [{ message: { content: '重试后成功继续', reasoning: '' }, finish_reason: 'stop' }]
+}), {
+  status: 200,
+  headers: { 'content-type': 'application/json' }
+}));
+await sandbox.RPConversation.retryLastGeneration();
+await sandbox.RPConversation.whenStateSettled();
+assert.equal(sandbox.RPConversation.canRetryLastGeneration(), false);
+assert.equal(sandbox.RPGenerationMonitor.snapshot().phase, 'complete');
+assert.deepEqual(JSON.parse(requests.at(-1).options.body).messages, firstFailedPrompt);
+assert.equal(sandbox.RPConversation.list().filter(message => message.role === 'user' && message.content === '失败后只重试这一次输入').length, 1);
+assert.equal(sandbox.RPConversation.list().at(-1).content, '重试后成功继续');
+assert.equal(retryStateSyncs, 1, 'failed attempts must not apply state; the successful retry applies it once');
+delete sandbox.RPStateSync;
+
+const normalPromptCompile = sandbox.RPPrompt.compile;
+sandbox.RPPrompt.compile = async () => { throw new Error('prompt compilation failed before model request'); };
+await assert.rejects(sandbox.RPConversation.send('编译阶段失败也必须可重试'), /prompt compilation failed/);
+assert.equal(sandbox.RPGenerationMonitor.snapshot().phase, 'error');
+assert.equal(sandbox.RPConversation.canRetryLastGeneration(), true);
+sandbox.RPPrompt.compile = normalPromptCompile;
+responses.push(new Response(JSON.stringify({
+  choices: [{ message: { content: '编译恢复后继续', reasoning: '' }, finish_reason: 'stop' }]
+}), {
+  status: 200,
+  headers: { 'content-type': 'application/json' }
+}));
+await sandbox.RPConversation.retryLastGeneration();
+assert.equal(sandbox.RPConversation.list().filter(message => message.role === 'user' && message.content === '编译阶段失败也必须可重试').length, 1);
+assert.equal(sandbox.RPConversation.list().at(-1).content, '编译恢复后继续');
+
+sandbox.RPMemory.addStructured({ id: 'portable-note', kind: 'note', text: '完整存档必须保留这条记忆。' });
+values.set(sandbox.RPTemplateData.app.storagePrefix + ':community:notebook', JSON.stringify([{ id: 'note-1', text: '本地笔记' }]));
+const fullSave = await sandbox.RPStorage.exportFullBundle();
+assert.equal(fullSave.version, 2);
+assert(fullSave.context.conversation.messages.length >= 2);
+assert(fullSave.context.structuredMemory.entries.some(item => item.id === 'portable-note'));
+assert.equal(fullSave.localData.notebook[0].text, '本地笔记');
+await sandbox.RPConversation.clear();
+sandbox.RPMemory.reset();
+values.delete(sandbox.RPTemplateData.app.storagePrefix + ':community:notebook');
+await sandbox.RPStorage.importBundle(fullSave);
+assert.equal(sandbox.RPConversation.list().length, fullSave.context.conversation.messages.length);
+assert(sandbox.RPMemory.listStructured().some(item => item.id === 'portable-note'));
+assert.equal(JSON.parse(values.get(sandbox.RPTemplateData.app.storagePrefix + ':community:notebook'))[0].text, '本地笔记');
+await sandbox.RPConversation.clear();
 
 let releaseStaleResponse;
 responses.push(new Promise(resolve => { releaseStaleResponse = resolve; }));
@@ -319,6 +436,10 @@ console.log(JSON.stringify({
   conversationOperations: true,
   clearRaceGuard: true,
   fullVectorIndexWithRecentRecallExclusion: true,
+  fullSaveRoundTrip: true,
+  actionRerollRollback: true,
+  internalProtocolScrub: true,
+  singleImageProtocol: true,
   isolatedReset: true,
   secretLeak: false
 }, null, 2));

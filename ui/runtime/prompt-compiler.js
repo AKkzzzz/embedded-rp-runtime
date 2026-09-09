@@ -33,7 +33,10 @@
       groups[placement].push(hit);
     });
     Object.keys(groups).forEach(function (key) {
-      groups[key].sort(function (a, b) { return Number(a.order || 0) - Number(b.order || 0); });
+      groups[key].sort(function (a, b) {
+        return Number(a.order || 0) - Number(b.order || 0) ||
+          Number(a.sourceOrder || 0) - Number(b.sourceOrder || 0);
+      });
     });
     return groups;
   }
@@ -61,6 +64,83 @@
     return '[Style Priority]\n开场白和历史消息只用于理解剧情事实、人物关系和场景状态，不作为文风模板；不要继承或模仿开场白、前文回复的句式、语气密度、段落节奏或排版习惯。最终回复的文风必须优先遵守上方系统预设中的规定文风。';
   }
 
+  function unwrapWritingStyle(content) {
+    return String(content || '').replace(/^\s*<writing_style>\s*/i, '').replace(/\s*<\/writing_style>\s*$/i, '').trim();
+  }
+
+  function nextResponsePrompt(presetGroups) {
+    var style = (presetGroups.writingStyle || []).map(function (preset) {
+      return unwrapWritingStyle(preset.content);
+    }).filter(Boolean).join('\n\n');
+    return [
+      '<next_response>',
+      '完整承接最新用户输入中已经发生的言行，结合当前场景继续剧情。',
+      presetGroups.cot && presetGroups.cot.length ? '按当前COT预设完成内部分析，不要用分析摘要或正文草稿取代正式正文。' : '',
+      style,
+      '按系统中当前启用的人称、时间戳、记忆、变量与输出格式执行。',
+      '</next_response>'
+    ].filter(Boolean).join('\n');
+  }
+
+  function escapeXmlAttribute(value) {
+    return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function vectorMemoryText(memory) {
+    return String(memory && (memory.paragraph || memory.sourceText || memory.summary) || '').trim();
+  }
+
+  function compileVectorRecall(memories, maxChars) {
+    var budget = Math.max(1000, Math.min(30000, Number(maxChars) || 8000));
+    var header = '<role_memory_vector_recall>\n  <description>以下内容是按当前输入检索出的较早剧情分片，不是当前现场。</description>';
+    var footer = '</role_memory_vector_recall>';
+    var selected = [];
+    function render(items) {
+      return [header, items.map(function (memory) {
+        return '  <memory_fragment turn="' + escapeXmlAttribute(memory.turn || '?') + '" similarity="' +
+          escapeXmlAttribute((Number(memory.retrievalScore || 0) * 100).toFixed(1) + '%') + '">\n    ' +
+          memory.recallText.replace(/\n/g, '\n    ') + '\n  </memory_fragment>';
+      }).join('\n\n'), footer].join('\n');
+    }
+    (memories || []).forEach(function (memory) {
+      var text = vectorMemoryText(memory);
+      if (!text) return;
+      var candidate = Object.assign({}, memory, { recallText: text });
+      var content = render(selected.concat(candidate));
+      if (content.length > budget) {
+        var remaining = Math.max(0, budget - render(selected.concat(Object.assign({}, candidate, { recallText: '' }))).length - 1);
+        if (!remaining) return;
+        candidate.recallText = text.slice(0, remaining).trim() + '…';
+        content = render(selected.concat(candidate));
+      }
+      if (content.length <= budget) selected.push(candidate);
+    });
+    selected.sort(function (a, b) { return Number(a.turn || 0) - Number(b.turn || 0) || Number(a.sequence || 0) - Number(b.sequence || 0); });
+    if (!selected.length) return { content: '', items: [], chars: 0, truncated: false };
+    var content = render(selected);
+    return { content: content, items: selected, chars: content.length, truncated: selected.length < (memories || []).length };
+  }
+
+  function promptDiagnostics(messages) {
+    var output = { totalChars: 0, historyChars: 0, vectorRecallChars: 0, worldbookChars: 0, presetChars: 0, stateChars: 0, otherChars: 0 };
+    (messages || []).forEach(function (message) {
+      var count = String(message && message.content || '').length;
+      var source = String(message && message.source || '');
+      output.totalChars += count;
+      if (source === 'history' || source.indexOf('memory:classic:') === 0) output.historyChars += count;
+      else if (source === 'memory:vector') output.vectorRecallChars += count;
+      else if (source.indexOf('worldbook:') === 0) output.worldbookChars += count;
+      else if (source.indexOf('preset:') === 0 || source.indexOf('presets:') === 0) output.presetChars += count;
+      else if (source === 'state:variables') output.stateChars += count;
+      else output.otherChars += count;
+    });
+    return output;
+  }
+
+  function narrativePolicy() {
+    return String(window.RPTemplateData.narrativePolicy || '').trim();
+  }
+
   function activeToolProtocol() {
     if (!window.RPTools) return '';
     var enabled = window.RPTools.list().filter(function (tool) { return tool.enabled; });
@@ -69,7 +149,7 @@
       if (tool.type === 'vector_memory') return '<tool_memory_add:具体检索内容> 或 <tool_memory_cover:具体检索内容>：检索较早剧情、人物关系、物品和事件记忆。';
       if (tool.type === 'keyword_dialogue') return '<tool_grep_add:原文关键词> 或 <tool_grep_cover:原文关键词>：精准查找当前对话历史中的原文片段。';
       if (tool.type === 'web_search') return '<tool_web_add:搜索词或URL> 或 <tool_web_cover:搜索词或URL>：查询外部资料；只有宿主提供搜索能力时可用。';
-      if (tool.type === 'worldbook') return '<tool_worldbook_add:设定查询> 或 <tool_worldbook_cover:设定查询>：主动检索卡内世界书、规则与角色资料。';
+      if (tool.type === 'worldbook') return '<tool_worldbook_add:具体设定查询> 或 <tool_worldbook_cover:具体设定查询>：显式搜索卡内世界书的名称、触发词、标签与正文；可读取当前对话尚未自动触发的条目，每次最多返回6条并报告总命中数，仍遵守禁用、范围、状态与依赖规则。';
       if (tool.type === 'dice') return '<tool_dice:骰式>：执行公开随机检定，例如 d20、2d6+3。';
       return '<' + tool.callName + ':查询内容>';
     });
@@ -132,6 +212,8 @@
     });
     var summaries = [];
     var vectorMemories = await window.RPMemory.searchVectors(input, { signal: options.signal });
+    var memoryPreferences = window.RPStorage.getPreferences().memoryModules || {};
+    var vectorRecall = compileVectorRecall(vectorMemories, memoryPreferences.vectorRecallMaxChars);
     var presetGroups = window.RPPresets.compile();
     var messages = [];
 
@@ -151,6 +233,8 @@
     } else {
       messages.push({ role: 'system', content: stylePriority(), source: 'runtime:style-priority' });
     }
+    var policy = narrativePolicy();
+    if (policy) messages.push({ role: 'system', content: policy, source: 'runtime:narrative-policy' });
     var toolProtocol = activeToolProtocol();
     if (toolProtocol) messages.push({ role: 'system', content: toolProtocol, source: 'runtime:active-tools' });
     presetGroups.prelude.forEach(function (preset) {
@@ -179,13 +263,10 @@
         source: 'memory:structured'
       });
     }
-    if (vectorMemories.length) {
+    if (vectorRecall.content) {
       messages.push({
         role: 'system',
-        content: '【相关历史向量记忆】\n以下内容来自较早剧情的语义检索，不是当前现场；只把有证据的内容作为背景参考：\n' +
-          vectorMemories.map(function (memory) {
-            return '- ' + memory.sourceText + '（相关度 ' + Number(memory.retrievalScore || 0).toFixed(2) + '）';
-          }).join('\n'),
+        content: vectorRecall.content,
         source: 'memory:vector'
       });
     }
@@ -230,6 +311,11 @@
       });
     }
 
+    var latestInput = messages.slice().reverse().find(function (message) {
+      return message.role === 'user' && message.source === 'input';
+    });
+    if (latestInput) latestInput.content = String(latestInput.content || '').trimEnd() + '\n\n' + nextResponsePrompt(presetGroups);
+
     messages = messages.map(function (message) {
       return Object.assign({}, message, {
         content: resolvePlaceholders(message.content, options.state, options.character)
@@ -238,12 +324,16 @@
     var context = { input: input, messages: messages, retrieval: retrieval, memories: memories };
     context = await window.RPPlugins.run('beforePromptCompile', context);
     if (window.RPRegex) context.messages = window.RPRegex.applyPrompt(context.messages);
+    var diagnostics = promptDiagnostics(context.messages);
     last = {
       input: String(input || ''),
       messages: context.messages,
       worldbookHits: retrieval.hits,
       memoryHits: memories,
-      charCount: context.messages.reduce(function (sum, message) { return sum + String(message.content || '').length; }, 0),
+      vectorMemoryHits: vectorRecall.items,
+      vectorRecallTruncated: vectorRecall.truncated,
+      diagnostics: diagnostics,
+      charCount: diagnostics.totalChars,
       durationMs: Math.round((performance.now() - started) * 100) / 100,
       at: new Date().toISOString()
     };
@@ -253,6 +343,8 @@
 
   window.RPPrompt = {
     compile: compile,
+    compileVectorRecall: compileVectorRecall,
+    diagnostics: promptDiagnostics,
     last: function () { return last ? JSON.parse(JSON.stringify(last)) : null; }
   };
 })();

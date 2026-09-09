@@ -15,21 +15,20 @@
   "entryHtml": "ui/index.html",
   "startupMode": "debug",
   "worldbook": {
-    "selectiveLimit": 12,
-    "charBudget": 26000,
     "maxDependencyDepth": 3,
-    "scanMessageLimit": 12,
     "failOnCycle": false
   },
   "memory": {
     "structuredEnabled": true,
     "vectorEnabled": false,
     "vectorTopK": 8,
-    "similarityThreshold": 0.3,
-    "chunkChars": 700,
-    "chunkOverlap": 100,
+    "similarityThreshold": 0.4,
+    "chunkChars": 1200,
+    "chunkOverlap": 0,
+    "vectorRecallMaxChars": 8000,
+    "maxVectors": 0,
     "storageEncoding": "int8:maxabs:v1",
-    "patrolEnabled": true,
+    "patrolEnabled": false,
     "patrolIntervalMs": 60000,
     "retryEnabled": true,
     "maxRetryAttempts": 6
@@ -38,7 +37,7 @@
     "routes": [
       "narrative",
       "state",
-      "summarize",
+      "summary",
       "embedding"
     ],
     "credentialPolicy": "rphub-same-origin-read",

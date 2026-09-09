@@ -27,6 +27,8 @@ const source = `(function () {
   var attribution = {
     project: 'STA1N156/RP-Hub',
     source: 'https://github.com/STA1N156/RP-Hub',
+    revision: 'b409ca6',
+    version: '1.8.9',
     license: 'CC BY-NC 4.0',
     adapted: false,
     snapshot: 'sources/rphub-official-presets.json'

@@ -2,6 +2,7 @@
   'use strict';
 
   var activePatrol = null;
+  var activeSummaryController = null;
   var lastResult = { running: false, added: 0, failed: 0, pending: 0 };
 
   function settings() {
@@ -15,7 +16,10 @@
   }
 
   function cleanContent(value) {
-    return String(value || '')
+    var source = window.RPRegex && window.RPRegex.stripPromptTransport
+      ? window.RPRegex.stripPromptTransport(value)
+      : String(value || '');
+    return source
       .replace(/<cot>[\s\S]*?<\/cot>/gi, '')
       .replace(/<think>[\s\S]*?<\/think>/gi, '')
       .trim();
@@ -32,6 +36,11 @@
   }
 
   function turns(messages) {
+    if (window.RPVectorMemory && typeof window.RPVectorMemory.completeTurns === 'function') {
+      return window.RPVectorMemory.completeTurns(messages).filter(function (turn) {
+        return String(turn.user && turn.user.content || '').trim() && String(turn.assistant && turn.assistant.content || '').trim();
+      });
+    }
     var output = [];
     for (var i = 0; i < (messages || []).length - 1; i += 1) {
       if (messages[i] && messages[i].role === 'user' &&
@@ -62,7 +71,10 @@
   }
 
   function jobKey(turn) {
-    return turn.assistant.id ? 'id:' + turn.assistant.id : 'turn:' + turn.turn;
+    var ids = turn.sourceAssistantIds && turn.sourceAssistantIds.length
+      ? turn.sourceAssistantIds
+      : (turn.assistant.id ? [turn.assistant.id] : []);
+    return ids.length ? 'id:' + ids.join('|') : 'turn:' + turn.turn;
   }
 
   function findMemory(turn, lookup) {
@@ -74,7 +86,10 @@
     var liveById = new Map();
     var liveByTurn = new Map();
     liveTurns.forEach(function (turn) {
-      if (turn.assistant.id) liveById.set(turn.assistant.id, turn);
+      var ids = turn.sourceAssistantIds && turn.sourceAssistantIds.length
+        ? turn.sourceAssistantIds
+        : (turn.assistant.id ? [turn.assistant.id] : []);
+      ids.forEach(function (id) { liveById.set(id, turn); });
       liveByTurn.set(turn.turn, turn);
     });
     return window.RPMemory.removeStructured(function (memory) {
@@ -96,21 +111,26 @@
     var existing = new Set(classicMemories().map(memoryKey));
     return allTurns.filter(function (turn) {
       return !existing.has(jobKey(turn)) && !existing.has('turn:' + turn.turn);
-    }).map(function (turn, index) {
+    }).map(function (turn) {
       var targetIndex = allTurns.indexOf(turn);
       return {
         turn: turn.turn,
         key: jobKey(turn),
         contextTurns: allTurns.slice(Math.max(0, targetIndex - 3), targetIndex + 1),
-        sourceUserIds: turn.user.id ? [turn.user.id] : [],
-        sourceAssistantIds: turn.assistant.id ? [turn.assistant.id] : [],
+        sourceUserIds: turn.sourceUserIds && turn.sourceUserIds.length ? turn.sourceUserIds.slice() : (turn.user.id ? [turn.user.id] : []),
+        sourceAssistantIds: turn.sourceAssistantIds && turn.sourceAssistantIds.length ? turn.sourceAssistantIds.slice() : (turn.assistant.id ? [turn.assistant.id] : []),
         sourceUserText: cleanContent(turn.user.content),
         sourceAssistantText: cleanContent(turn.assistant.content)
       };
     });
   }
 
-  async function requestSummary(job) {
+  function latestJob(messages) {
+    var jobs = buildJobs(messages);
+    return jobs.length ? jobs[jobs.length - 1] : null;
+  }
+
+  async function requestSummary(job, signal) {
     var route = window.RPModels.routes().summary;
     var request = [{
       role: 'system',
@@ -132,7 +152,9 @@
     request.push({ role: 'user', content: '只总结最后一组“最新对话：唯一总结目标”，只输出总结正文。' });
     var result = await window.RPModels.generate('summary', request, {
       stream: false,
-      temperature: route.temperature
+      temperature: route.temperature,
+      signal: signal,
+      monitor: false
     });
     var summary = String(result.content || '')
       .replace(/^\x60\x60\x60(?:text|markdown)?\s*/i, '')
@@ -144,8 +166,8 @@
     return summary;
   }
 
-  async function storeJob(job) {
-    var summary = await requestSummary(job);
+  async function storeJob(job, signal) {
+    var summary = await requestSummary(job, signal);
     var result = window.RPMemory.addStructured({
       id: 'classic-' + job.turn + '-' + fingerprint(job.key),
       kind: 'classicMemory',
@@ -165,7 +187,7 @@
     return result.ok;
   }
 
-  async function runPatrol(messages) {
+  async function runPatrol(messages, signal) {
     var jobs = buildJobs(messages);
     var result = { running: true, added: 0, failed: 0, pending: jobs.length, errors: [] };
     lastResult = result;
@@ -178,11 +200,13 @@
     var cursor = 0;
     async function worker() {
       while (cursor < jobs.length) {
+        if (signal && signal.aborted) { result.cancelled = true; break; }
         var job = jobs[cursor];
         cursor += 1;
         try {
-          if (await storeJob(job)) result.added += 1;
+          if (await storeJob(job, signal)) result.added += 1;
         } catch (error) {
+          if (error && error.name === 'AbortError') { result.cancelled = true; break; }
           result.failed += 1;
           result.errors.push({ turn: job.turn, message: String(error.message || error) });
           await window.RPEvents.emit('memory:summary:error', {
@@ -204,8 +228,54 @@
   function summarize(messages) {
     if (settings().memoryMode === 'vector' || !settings().summaryEnabled) return Promise.resolve({ ok: false, skipped: true });
     if (activePatrol) return activePatrol;
-    activePatrol = runPatrol(messages).finally(function () { activePatrol = null; });
+    var controller = new AbortController();
+    activeSummaryController = controller;
+    activePatrol = runPatrol(messages, controller.signal).finally(function () {
+      if (activeSummaryController === controller) activeSummaryController = null;
+      activePatrol = null;
+    });
     return activePatrol;
+  }
+
+  async function summarizeLatest(messages) {
+    if (settings().memoryMode === 'vector' || !settings().summaryEnabled) return { ok: false, skipped: true };
+    if (activePatrol) return activePatrol;
+    var job = latestJob(messages);
+    if (!job) return { ok: true, skipped: true, added: 0 };
+    var controller = new AbortController();
+    activeSummaryController = controller;
+    activePatrol = (async function () {
+      var result = { running: true, added: 0, failed: 0, pending: 1, errors: [] };
+      lastResult = result;
+      try {
+        if (await storeJob(job, controller.signal)) result.added = 1;
+      } catch (error) {
+        if (error && error.name === 'AbortError') result.cancelled = true;
+        else {
+          result.failed = 1;
+          result.errors.push({ turn: job.turn, message: String(error.message || error) });
+          await window.RPEvents.emit('memory:summary:error', { turn: job.turn, message: String(error.message || error) });
+        }
+      }
+      if (window.RPMemory.flush) await window.RPMemory.flush();
+      result.pending = 0;
+      result.running = false;
+      lastResult = result;
+      await window.RPEvents.emit('memory:summary:changed', result);
+      return result;
+    })().finally(function () {
+      if (activeSummaryController === controller) activeSummaryController = null;
+      activePatrol = null;
+    });
+    return activePatrol;
+  }
+
+  async function abortActive() {
+    if (activeSummaryController) activeSummaryController.abort();
+    if (activePatrol) {
+      try { await activePatrol; } catch (_error) {}
+    }
+    return true;
   }
 
   function contextHistory(messages, keepFloors) {
@@ -232,6 +302,8 @@
 
   window.RPSummary = {
     summarize: summarize,
+    summarizeLatest: summarizeLatest,
+    abortActive: abortActive,
     patrol: summarize,
     contextHistory: contextHistory,
     pendingJobs: function (messages) { return buildJobs(messages).length; },

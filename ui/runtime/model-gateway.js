@@ -286,7 +286,11 @@
     context = await window.RPPlugins.run('beforeRequest', context);
     var inheritedRequestParameters = requestParameters(route, context.options);
     var started = performance.now();
-    if (window.RPGenerationMonitor && options.monitor !== false) {
+    // This monitor belongs to the main narrative surface. Summary, state,
+    // camera and other background routes keep their own traces and must not
+    // overwrite the narrative reasoning/content snapshot after a turn.
+    var monitorEnabled = routeId === 'narrative' && options.monitor !== false;
+    if (window.RPGenerationMonitor && monitorEnabled) {
       window.RPGenerationMonitor.start({
         route: routeId,
         model: context.model,
@@ -316,11 +320,11 @@
       }
       var result = await readResponse(response, context.options.stream, {
         onDelta: function (delta, total) {
-          if (window.RPGenerationMonitor && options.monitor !== false) window.RPGenerationMonitor.content(delta, total);
+          if (window.RPGenerationMonitor && monitorEnabled) window.RPGenerationMonitor.content(delta, total);
           if (options.onDelta) options.onDelta(delta, total);
         },
         onReasoning: function (delta, total) {
-          if (window.RPGenerationMonitor && options.monitor !== false) window.RPGenerationMonitor.reasoning(delta, total);
+          if (window.RPGenerationMonitor && monitorEnabled) window.RPGenerationMonitor.reasoning(delta, total);
           if (options.onReasoning) options.onReasoning(delta, total);
         }
       });
@@ -329,11 +333,11 @@
       result.durationMs = Math.round(performance.now() - started);
       result = await window.RPPlugins.run('afterResponse', result);
       remember({ kind: 'generation', route: routeId, model: context.model, status: 'ok', durationMs: result.durationMs });
-      if (window.RPGenerationMonitor && options.monitor !== false) window.RPGenerationMonitor.finish(result);
+      if (window.RPGenerationMonitor && monitorEnabled) window.RPGenerationMonitor.finish(result);
       return result;
     } catch (error) {
       remember({ kind: 'generation', route: routeId, model: context.model, status: error && error.name === 'AbortError' ? 'aborted' : 'error', detail: String(error.message || error) });
-      if (window.RPGenerationMonitor && options.monitor !== false) window.RPGenerationMonitor.fail(error);
+      if (window.RPGenerationMonitor && monitorEnabled) window.RPGenerationMonitor.fail(error);
       throw error;
     }
   }

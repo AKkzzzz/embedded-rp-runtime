@@ -11,7 +11,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'single-stage.manife
 const core = JSON.parse(fs.readFileSync(path.join(root, 'card_src', 'core.json'), 'utf8'));
 const output = process.argv[2]
   ? path.resolve(process.argv[2])
-  : path.join(root, 'release', '内嵌RP运行时模板-v0.1-debug.json');
+  : path.join(root, 'release', '内嵌RP运行时模板-v0.2-debug.json');
 
 function read(relative) {
   return fs.readFileSync(path.join(uiRoot, relative), 'utf8');
@@ -95,7 +95,7 @@ const card = {
         schemaVersion: manifest.schemaVersion,
         appId: manifest.appId,
         mode: manifest.mode,
-        version: '0.1.0-debug',
+        version: '0.2.0-debug',
         provenance: {
           owner: manifest.provenance && manifest.provenance.owner || 'AKkzzzz',
           projectType: manifest.provenance && manifest.provenance.projectType || 'RP-Hub 单正则 + 插件功能的小卡底层',

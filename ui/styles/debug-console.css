@@ -85,6 +85,8 @@ h3 {
 .runtime-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -130,6 +132,12 @@ button.secondary {
 .host-chip.degraded {
   border-color: rgba(216, 182, 107, 0.55);
   color: var(--gold);
+}
+
+.host-chip.error {
+  border-color: rgba(220, 111, 103, 0.62);
+  color: var(--red);
+  background: rgba(75, 24, 26, 0.72);
 }
 
 .runtime-layout {
@@ -288,6 +296,11 @@ button.secondary {
   touch-action: auto;
 }
 
+.rp-capability-window-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .rp-capability-head span,
 .rp-capability-summary {
   color: rgba(233, 241, 255, 0.65);
@@ -300,6 +313,18 @@ button.secondary {
   padding: 0 10px;
   border-color: rgba(160, 190, 230, 0.28);
   color: #cbd9eb;
+  font-size: 12px;
+}
+
+.rp-capability-window-actions [data-cap-retry] {
+  border-color: rgba(116, 212, 192, 0.78);
+  background: rgba(116, 212, 192, 0.18);
+  color: var(--ink);
+}
+
+.rp-capability-retry-feedback {
+  margin: 7px 0;
+  color: var(--cyan);
   font-size: 12px;
 }
 
@@ -838,6 +863,31 @@ textarea:focus {
 
 .conversation-head h2 {
   margin: 0;
+}
+
+.image-generation-status {
+  max-width: min(42vw, 360px);
+  padding: 5px 9px;
+  border: 1px solid rgba(116, 212, 192, 0.42);
+  border-radius: 7px;
+  color: var(--cyan);
+  background: rgba(16, 46, 45, 0.72);
+  font: 11px/1.35 var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-generation-status[data-phase="error"] {
+  border-color: rgba(220, 111, 103, 0.58);
+  color: var(--red);
+  background: rgba(75, 24, 26, 0.72);
+}
+
+.image-generation-status[data-phase="complete"] {
+  border-color: rgba(121, 200, 144, 0.52);
+  color: var(--green);
+  background: rgba(19, 56, 36, 0.7);
 }
 
 .conversation-log {

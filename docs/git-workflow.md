@@ -39,7 +39,7 @@ node tools/render-preview.mjs
 
 构建结果：
 
-- `release/内嵌RP运行时模板-v0.1-debug.json`
+- `release/内嵌RP运行时模板-v0.2-debug.json`
 - `qa/template-card-preview.html`
 
 ## 提交自己的修改

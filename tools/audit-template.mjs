@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const target = process.argv[2]
   ? path.resolve(process.argv[2])
-  : path.join(root, 'release', '内嵌RP运行时模板-v0.1-debug.json');
+  : path.join(root, 'release', '内嵌RP运行时模板-v0.2-debug.json');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'single-stage.manifest.json'), 'utf8'));
 const payload = JSON.parse(fs.readFileSync(target, 'utf8'));
 const data = payload.data;
@@ -39,23 +39,46 @@ const inner = zlib.gunzipSync(Buffer.from(encoded, 'base64')).toString('utf8');
 
 const sourceContracts = [
   ['ui/runtime/prompt-compiler.js', ["source: 'state:variables'"], ["source: 'state:canonical'"]],
-  ['ui/runtime/conversation-engine.js', ['generationEpoch', 'whenStateSettled', 'committed:', 'conversation:v1', 'totalMessages'], []],
-  ['ui/runtime/memory-engine.js', ['structured-memory:v1', 'function init', 'function removeStructured'], []],
+  ['ui/runtime/conversation-engine.js', [
+    'generationEpoch', 'whenStateSettled', 'committed:', 'conversation:v1', 'totalMessages',
+    'retryLastAction', 'reviseLastAction', 'stripInternalTransport', 'extractImageRequest', 'count: 1',
+    'exportData', 'importData'
+  ], []],
+  ['ui/runtime/memory-engine.js', [
+    'structured-memory:v1', 'function init', 'function removeStructured', 'exportData', 'importData'
+  ], []],
   ['ui/runtime/summary-engine.js', ['summaryConcurrency', 'function buildJobs', 'function contextHistory'], []],
   ['ui/runtime/tool-engine.js', ['function callKey', "status: 'duplicate'"], []],
   ['ui/runtime/vector-memory-engine.js', [
     "window.RPTemplateData.app.storagePrefix + ':vectors:v1'",
     'function indexableMessages',
     'function retainedTurnSet',
-    'clearAll: clearAll'
+    'function memoryText',
+    'function serializeMutation',
+    'function dedupeItems',
+    'version: 2',
+    'clearAll: clearAll',
+    'exportData: exportData',
+    'importData: importData'
   ], ["var dbName = 'nanami_embedded_rp_vectors_v1'"]],
+  ['ui/runtime/regex-engine.js', ['function stripReasoning', 'function stripPromptTransport', 'stripPromptTransport: stripPromptTransport'], []],
   ['ui/runtime/ui-template-state.js', ['var lastTrace', 'trace: function', 'var latest = window.RPStorage.getCanonical()'], []],
   ['ui/runtime/capability-plugins.js', [
     'function makeDraggable',
     'data-cap-expand',
     'function stateTrace'
   ], ['window.RPTimeline', "attach('runtime.timeline'"]],
-  ['ui/runtime/storage-engine.js', ['function preferenceDefaults', 'ownedPrefix'], []],
+  ['ui/runtime/storage-engine.js', [
+    'function preferenceDefaults', 'ownedPrefix', 'exportFullBundle', 'inspectBundle', 'importBundle',
+    'syncMemoryFromHost', 'last-action-checkpoint'
+  ], []],
+  ['ui/runtime/host-bridge.js', [
+    'memorySettings: publicMemorySettings',
+    'checkImageService: checkImageService',
+    'redetectImageGeneration: redetectImageGeneration',
+    "method: 'HEAD'",
+    "mode: 'no-cors'"
+  ], []],
   ['ui/runtime/model-gateway.js', ['function embeddingModels', 'testEmbeddingModel'], []]
 ];
 for (const [relative, required, forbidden] of sourceContracts) {
@@ -81,8 +104,20 @@ for (const needle of [
   'window.RPConversation',
   'window.RPUIStateSync',
   'window.RPGenerationMonitor',
+    'retryLastGeneration',
+    'retryLastAction',
+    'reviseLastAction',
+    'exportFullBundle',
+    'importBundle',
+    'extractImageRequest',
+    'importSaveButton',
+    'exportSaveButton',
+  'data-cap-retry',
+  'retryGenerationButton',
   'window.RPDiagnostics',
   'window.RPPresetManager'
+  ,'redetectImageGeneration'
+  ,'重新检测'
 ]) {
   if (!inner.includes(needle)) throw new Error(`inner runtime missing ${needle}`);
 }
@@ -97,7 +132,11 @@ for (const needle of [
   'function indexableMessages',
   'function retainedTurnSet',
   'function makeDraggable',
-  'testEmbeddingModel'
+  'testEmbeddingModel',
+  'retryLastAction',
+  'reviseLastAction',
+  'exportFullBundle',
+  'memorySettings: publicMemorySettings'
 ]) {
   if (!inner.includes(needle)) throw new Error(`packed runtime missing contract: ${needle}`);
 }
@@ -186,10 +225,46 @@ for (const plugin of templateData.plugins) {
 }
 
 const worldbookSettings = templateData.worldbookSettings || {};
-for (const key of ['scanDepth', 'maxScanDepth', 'charBudget', 'maxDependencyDepth']) {
+for (const key of ['scanDepth', 'maxScanDepth', 'maxDependencyDepth']) {
   if (!Number.isFinite(worldbookSettings[key]) || worldbookSettings[key] < 0) {
     throw new Error(`invalid worldbook setting: ${key}`);
   }
+}
+for (const key of ['selectiveLimit', 'charBudget', 'maxCombatHits']) {
+  if (Object.prototype.hasOwnProperty.call(worldbookSettings, key)) {
+    throw new Error(`worldbook retrieval must not silently discard matched entries via ${key}`);
+  }
+}
+if (Object.prototype.hasOwnProperty.call(worldbookSettings, 'scanMessageLimit')) {
+  throw new Error('scanMessageLimit is not a worldbook entry limit and must not be declared');
+}
+const toolEngineSource = fs.readFileSync(path.join(root, 'ui/runtime/tool-engine.js'), 'utf8');
+for (const required of ['tool.resultCount', 'totalHits', '返回 \' + hits.length + \' / 总计 \' + totalHits']) {
+  if (!toolEngineSource.includes(required)) throw new Error(`active worldbook result limit must be explicit: ${required}`);
+}
+const narrativePolicy = String(templateData.narrativePolicy || '');
+for (const required of [
+  '不因其玩家身份默认正确、全知、值得崇拜或拥有指挥权',
+  '普通路线、队形、警戒、工作分配与低风险事务由职责所有者形成判断并推进',
+  '行动结果、另一人物的决定或反应、环境或威胁的新变化',
+  '不要连续两轮用'
+]) {
+  if (!narrativePolicy.includes(required)) throw new Error(`narrative policy missing: ${required}`);
+}
+const imageProtocol = templateData.worldbook.find(entry => entry.id === 'runtime-image-generation-contract');
+if (!imageProtocol || !imageProtocol.constant || imageProtocol.placement !== 'assistant_top') {
+  throw new Error('image generation protocol must be a constant assistant_top worldbook entry');
+}
+for (const required of ['[IMAGE_PROMPT|稳定场景ID|英文逗号标签]', '每次回复最多提交一张图', '不直接调用图片 API', '不输出 URL']) {
+  if (!String(imageProtocol.content || '').includes(required)) throw new Error(`image protocol missing: ${required}`);
+  if (!inner.includes(required)) throw new Error(`packed runtime missing image protocol: ${required}`);
+}
+for (const packedPolicy of ['runtime:narrative-policy', '不因其玩家身份默认正确、全知、值得崇拜或拥有指挥权', '不要连续两轮用']) {
+  if (!inner.includes(packedPolicy)) throw new Error(`packed runtime missing narrative policy: ${packedPolicy}`);
+}
+const promptCompilerSource = fs.readFileSync(path.join(root, 'ui/runtime/prompt-compiler.js'), 'utf8');
+for (const required of ['function narrativePolicy()', "source: 'runtime:narrative-policy'"]) {
+  if (!promptCompilerSource.includes(required)) throw new Error(`prompt compiler missing narrative policy boundary: ${required}`);
 }
 
 const presetIds = new Set();

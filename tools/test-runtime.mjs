@@ -77,12 +77,22 @@ const stateValidation = sandbox.RPStateGuard.validate(
   sandbox.RPTemplateData.stateSchema
 );
 assert.equal(stateValidation.ok, true);
+assert.equal(sandbox.RPStorage.debugEnabled(), false);
+sandbox.RPStorage.savePreferences({ debugEnabled: true });
+assert.equal(sandbox.RPStorage.debugEnabled(), true);
+sandbox.RPStorage.savePreferences({ debugEnabled: false });
+assert.equal(sandbox.RPStorage.debugEnabled(), false);
 assert.deepEqual(sandbox.RPUIStateSync.list(), []);
-assert.equal(sandbox.RPPresets.list().length, 15);
-assert.equal(sandbox.RPPresets.byId('rphub-official-13').runtimeEnabled, true);
-assert.equal(sandbox.RPPresets.setEnabled('rphub-official-12', true), true);
-assert.equal(sandbox.RPPresets.byId('rphub-official-12').runtimeEnabled, true);
-assert.equal(sandbox.RPPresets.byId('rphub-official-13').runtimeEnabled, true);
+assert.equal(sandbox.RPPresets.list().length, 17);
+assert.equal(sandbox.RPWorldbook.update('runtime-contract', { content: '玩家本地覆盖后的运行时契约。' }).ok, true);
+assert.equal(sandbox.RPWorldbook.byId('runtime-contract').content, '玩家本地覆盖后的运行时契约。');
+assert.equal(sandbox.RPWorldbook.restoreBuiltin('runtime-contract'), true);
+assert.match(sandbox.RPWorldbook.byId('runtime-contract').content, /canonical state/);
+const timestampPreset = sandbox.RPPresets.list().find(preset => preset.name === '时间戳');
+assert.ok(timestampPreset && timestampPreset.runtimeEnabled, 'RP-Hub 1.8.9 timestamp preset must be present');
+const thirdPersonPreset = sandbox.RPPresets.list().find(preset => preset.name === '第三人称');
+assert.equal(sandbox.RPPresets.setEnabled(thirdPersonPreset.id, true), true);
+assert.equal(sandbox.RPPresets.byId(thirdPersonPreset.id).runtimeEnabled, true);
 sandbox.RPPresets.reset();
 
 const importedPresets = sandbox.RPPresets.importRpHub([
@@ -101,7 +111,7 @@ const importedPresets = sandbox.RPPresets.importRpHub([
 ]);
 assert.equal(importedPresets.ok, true);
 assert.equal(importedPresets.imported.length, 2);
-assert.equal(sandbox.RPPresets.list().length, 17);
+assert.equal(sandbox.RPPresets.list().length, 19);
 assert.equal(importedPresets.imported[0].phase, 'system-support');
 assert.equal(importedPresets.imported[1].phase, 'prelude');
 const exportedPresets = sandbox.RPPresets.exportRpHub(importedPresets.imported.map(preset => preset.id));
@@ -127,15 +137,20 @@ personalizedState.rpg.stats = { hp: '5/5' };
 sandbox.RPStorage.saveCanonical(personalizedState);
 const compiledPrompt = await sandbox.RPPrompt.compile('{{user}}检查世界书递归扫描');
 assert(compiledPrompt.messages.some(message => message.content.includes('[Style Priority]')));
+const narrativePolicyMessage = compiledPrompt.messages.find(message => message.source === 'runtime:narrative-policy');
+assert(narrativePolicyMessage);
+assert.match(narrativePolicyMessage.content, /不因其玩家身份默认正确、全知、值得崇拜或拥有指挥权/);
+assert.match(narrativePolicyMessage.content, /行动结果、另一人物的决定或反应、环境或威胁的新变化/);
+assert.match(narrativePolicyMessage.content, /不要连续两轮用/);
 assert(compiledPrompt.messages.some(message => message.content.includes('测试玩家检查世界书递归扫描')));
 assert(!compiledPrompt.messages.some(message => message.content.includes('{{user}}')));
 assert.equal(JSON.stringify(compiledPrompt.messages.slice(0, 6).map(message => message.source)), JSON.stringify([
   'preset:rphub-official-01',
   'worldbook:system-top:runtime-contract',
   'presets:system-support',
+  'runtime:narrative-policy',
   'preset:rphub-official-02',
-  'preset:rphub-official-03',
-  'preset:rphub-official-04'
+  'preset:rphub-official-03'
 ]));
 assert(compiledPrompt.messages.some(message => message.source === 'character:context' && message.content.includes('递归检索必须')));
 const variableMessage = compiledPrompt.messages.find(message => message.source === 'state:variables');
@@ -150,7 +165,7 @@ for (const privateKey of ['runtime', 'conversation', 'knowledge', 'uiTemplates']
 assert.equal(compiledPrompt.messages.some(message => message.source === 'state:canonical'), false);
 
 const retrieval = sandbox.RPWorldbook.retrieve('请检查世界书递归扫描');
-assert.deepEqual(retrieval.hits.map(hit => hit.id), ['runtime-contract', 'example-regex-trigger']);
+assert.deepEqual(retrieval.hits.map(hit => hit.id), ['runtime-image-generation-contract', 'runtime-contract', 'example-regex-trigger']);
 
 const rpHubFixtures = [
   { id: 'history-hit', comment: '历史命中', content: '历史扫描已生效。', keys: ['旧港口'], scanDepth: 2, position: 'user_top', order: 10 },
@@ -187,18 +202,35 @@ assert(!sandbox.RPWorldbook.retrieve('概率测试', { random: () => 0 }).hits.s
 const compatibilityFixtures = [
   { id: 'constant-zero', comment: '零概率常驻', content: '仍应命中。', constant: true, probability: 0 },
   { id: 'invalid-regex', comment: '非法正则', content: '不得中断。', keys: ['/[invalid/'], useRegex: true }
-].concat(Array.from({ length: 13 }, (_, index) => ({
+].concat(Array.from({ length: 24 }, (_, index) => ({
   id: 'bulk-hit-' + index,
   comment: '批量命中 ' + index,
   content: '批量内容 ' + index,
-  keys: ['批量命中']
+  keys: ['批量命中'],
+  order: 500
 }))).map(entry => ({ ...entry, enabled: true, scope: 'character', position: 'at_depth' }));
 sandbox.RPTemplateData.worldbook.push(...compatibilityFixtures);
 const zeroDepth = sandbox.RPWorldbook.retrieve('批量命中', { scanDepth: 0 });
 assert(zeroDepth.hits.some(hit => hit.id === 'constant-zero'));
 assert.equal(zeroDepth.hits.filter(hit => hit.id.startsWith('bulk-hit-')).length, 0);
 const allBulkHits = sandbox.RPWorldbook.retrieve('批量命中');
-assert.equal(allBulkHits.hits.filter(hit => hit.id.startsWith('bulk-hit-')).length, 13);
+const bulkHits = allBulkHits.hits.filter(hit => hit.id.startsWith('bulk-hit-'));
+assert.equal(bulkHits.length, 24, 'all matched entries survive beyond the former selective limit');
+assert.deepEqual(Array.from(bulkHits, hit => hit.id), Array.from({ length: 24 }, (_, index) => 'bulk-hit-' + index),
+  'equal-score and equal-order hits retain source order');
+const largeEntries = Array.from({ length: 3 }, (_, index) => ({
+  id: 'large-hit-' + index,
+  comment: '大字符命中 ' + index,
+  content: String(index).repeat(22000),
+  keys: ['大字符命中'],
+  enabled: true,
+  scope: 'character',
+  position: 'at_depth',
+  order: 501
+}));
+sandbox.RPTemplateData.worldbook.push(...largeEntries);
+assert.equal(sandbox.RPWorldbook.retrieve('大字符命中').hits.filter(hit => hit.id.startsWith('large-hit-')).length, 3,
+  'all matched entries survive beyond the former character budget');
 assert.doesNotThrow(() => sandbox.RPWorldbook.retrieve('非法正则'));
 assert(!sandbox.RPWorldbook.retrieve('继续', {
   history: [{ role: 'user', content: '旧港口' }, { role: 'assistant', content: '已经离开。' }],
@@ -286,6 +318,9 @@ const committed = sandbox.RPWorldbookPatches.commit('proposal-1');
 assert.equal(committed.ok, true);
 assert.equal(committed.revision, 2);
 assert.equal(sandbox.RPWorldbook.byId('memory-derived-test').name, '测试长期事实');
+assert(!sandbox.RPWorldbook.retrieve('已确认剧情事实').hits.some(hit => hit.id === 'memory-derived-test'));
+const manualLookup = sandbox.RPWorldbook.retrieve('已确认剧情事实', { manual: true });
+assert(manualLookup.hits.some(hit => hit.id === 'memory-derived-test'), 'manual lookup can find an untriggered entry by content');
 
 const lockedEdit = sandbox.RPWorldbookPatches.validateProposal({
   baseRevision: 2,
@@ -351,9 +386,12 @@ assert.match(poolTool.calls[0].content, /成功数 =/);
 assert.equal(typeof sandbox.RPUIStateSync.trace, 'function');
 assert.equal(typeof sandbox.RPMemory.reset, 'function');
 sandbox.RPTools.setEnabled('tool_worldbook', true);
-const worldbookTool = await sandbox.RPTools.run('<tool_worldbook:测试长期事实>');
+const completeWorldbookTool = await sandbox.RPTools.run('<tool_worldbook:批量内容>');
+assert.match(completeWorldbookTool.calls[0].content, /返回 6 \/ 总计 24 条命中/, 'active worldbook lookup must disclose its six-result limit');
+const worldbookTool = await sandbox.RPTools.run('<tool_worldbook:已确认剧情事实>');
 assert.equal(worldbookTool.calls.length, 1);
 assert.equal(worldbookTool.calls[0].status, 'ok');
+assert.match(worldbookTool.calls[0].content, /返回 1 \/ 总计 1 条命中/);
 assert.match(worldbookTool.calls[0].content, /测试长期事实/);
 assert.equal(typeof sandbox.RPPromptInspector.snapshot, 'function');
 assert.equal(typeof sandbox.RPGuided.suggest, 'function');
@@ -373,7 +411,7 @@ assert(pluginStates.find(plugin => plugin.id === 'runtime.patch.guard').calls > 
 console.log(JSON.stringify({
   ok: true,
   initialStateValid: true,
-  presets: 15,
+  presets: 17,
   presetImportExport: true,
   officialDefaults: sandbox.RPPresets.list().slice(0, 15).every(preset => preset.builtin),
   promptOrder: compiledPrompt.messages.slice(0, 6).map(message => message.source),
